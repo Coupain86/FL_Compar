@@ -4,3 +4,5 @@ test_pdfs/
 test_pdfs.zip
 *.html
 .pdf_compare_prefs.json
+*.imgspec
+*_regen/
