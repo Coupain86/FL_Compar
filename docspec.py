@@ -27,6 +27,8 @@ Usage :
     py docspec.py roundtrip doc.pdf --lossless
     py docspec.py encode  image.png -o sortie.imgspec --quality 80
     py docspec.py decode  sortie.imgspec -o dossier_sortie
+    py docspec.py svg     sortie.imgspec              (SVG hybride : image fidèle + texte éditable)
+    py docspec.py render  sortie.imgspec              (rendu depuis la structure seule = voie éditable)
 """
 
 import argparse
@@ -36,8 +38,11 @@ import os
 import sys
 import zipfile
 
+import base64
+import html
+
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 try:
     import fitz  # PyMuPDF — pour les PDF
@@ -170,6 +175,22 @@ def extract_vector_regions(rgb, block=REGION_BLOCK, tol=6, min_area_blocks=4):
     return regions
 
 
+def _glyph_color(patch):
+    """Couleur des glyphes : moyenne des pixels les plus contrastés vs le fond
+    (et non la médiane, qui renvoie la couleur du fond)."""
+    px = patch.reshape(-1, 3)
+    if px.size == 0:
+        return [0, 0, 0]
+    lum = px.astype(np.float64) @ np.array([0.299, 0.587, 0.114])
+    bg = float(np.median(lum))
+    # pixels les plus éloignés du fond en luminance = traits du texte
+    far = np.abs(lum - bg)
+    thr = np.percentile(far, 75)
+    sel = px[far >= thr]
+    src = sel if sel.size else px
+    return [int(c) for c in src.mean(0)]
+
+
 def extract_text(rgb, dpi):
     """OCR optionnel (Tesseract). Mots + position + taille de police + couleur."""
     try:
@@ -191,8 +212,7 @@ def extract_text(rgb, dpi):
         if conf < OCR_MIN_CONF:
             continue
         x, y, w, h = (int(data[k][i]) for k in ("left", "top", "width", "height"))
-        patch = rgb[max(0, y):y + h, max(0, x):x + w].reshape(-1, 3)
-        col = [int(c) for c in np.median(patch, 0)] if patch.size else [0, 0, 0]
+        col = _glyph_color(rgb[max(0, y):y + h, max(0, x):x + w])
         words.append({"text": t, "x": x, "y": y, "w": w, "h": h,
                       "font_pt": round(h * 72.0 / max(dpi, 1), 1),
                       "color": col, "conf": round(conf, 1)})
@@ -316,6 +336,16 @@ def encode(path, out_path, lossless=False, quality=DEFAULT_QUALITY,
 # ─────────────────────────────────────────────
 #  DÉCODAGE
 # ─────────────────────────────────────────────
+def _recon_page(zf, page):
+    """Reconstruit le raster fidèle d'une page (base + résidu)."""
+    recon = base_from_webp(zf.read(page["base_layer"]["asset"]))
+    res = page.get("residual_layer")
+    if res and res.get("asset"):
+        q, step = residual_from_bytes(zf.read(res["asset"]))
+        recon = apply_residual(recon, q, step)
+    return recon
+
+
 def decode(spec_path, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     out_files = []
@@ -323,15 +353,118 @@ def decode(spec_path, out_dir):
         manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
         stem = os.path.splitext(os.path.basename(manifest.get("source", "image")))[0]
         for page in manifest["pages"]:
-            recon = base_from_webp(zf.read(page["base_layer"]["asset"]))
-            res = page.get("residual_layer")
-            if res and res.get("asset"):
-                q, step = residual_from_bytes(zf.read(res["asset"]))
-                recon = apply_residual(recon, q, step)
+            recon = _recon_page(zf, page)
             out_path = os.path.join(out_dir, f"{stem}_regen_p{page['index']:03d}.png")
             Image.fromarray(recon, "RGB").save(out_path)
             out_files.append(out_path)
     return out_files
+
+
+# ─────────────────────────────────────────────
+#  PHASE 3 — EXPORT SVG HYBRIDE (image fidèle + couche texte éditable)
+# ─────────────────────────────────────────────
+def _hex(c):
+    return "#{:02x}{:02x}{:02x}".format(*(int(max(0, min(255, v))) for v in c))
+
+
+def build_svg(recon_rgb, page) -> str:
+    """
+    SVG hybride : raster fidèle au fond (garantit l'identique) + couche TEXTE
+    OCR éditable/sélectionnable par-dessus (invisible, comme un PDF cherchable)
+    + couche RÉGIONS VECTORIELLES masquée (éditable). Ouvrable dans tout navigateur.
+    """
+    h, w = recon_rgb.shape[:2]
+    buf = io.BytesIO()
+    Image.fromarray(recon_rgb, "RGB").save(buf, format="PNG", optimize=True)
+    png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+    st = page.get("structure", {})
+    # Régions vectorielles (couche éditable, masquée par défaut)
+    rects = "".join(
+        f'<rect x="{r["x"]}" y="{r["y"]}" width="{r["w"]}" height="{r["h"]}" '
+        f'fill="{_hex(r["color"])}"/>'
+        for r in st.get("vector_regions", []))
+    # Texte OCR : sélectionnable/éditable, superposé et invisible (fill-opacity:0)
+    words = ""
+    txt = st.get("text", {})
+    if txt.get("available"):
+        for word_ in txt.get("words", []):
+            fs = max(1, int(word_["h"]))
+            ty = word_["y"] + int(word_["h"] * 0.8)
+            words += (f'<text x="{word_["x"]}" y="{ty}" font-size="{fs}" '
+                      f'fill="{_hex(word_["color"])}" fill-opacity="0" '
+                      f'font-family="sans-serif">{html.escape(word_["text"])}</text>')
+
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+        f'viewBox="0 0 {w} {h}">\n'
+        f'  <image x="0" y="0" width="{w}" height="{h}" '
+        f'href="data:image/png;base64,{png_b64}"/>\n'
+        f'  <g id="vector_regions" display="none">{rects}</g>\n'
+        f'  <g id="text_layer">{words}</g>\n'
+        f'</svg>\n')
+
+
+def export_svg(spec_path, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    files = []
+    with zipfile.ZipFile(spec_path, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        stem = os.path.splitext(os.path.basename(manifest.get("source", "image")))[0]
+        for page in manifest["pages"]:
+            recon = _recon_page(zf, page)
+            svg = build_svg(recon, page)
+            out_path = os.path.join(out_dir, f"{stem}_p{page['index']:03d}.svg")
+            with open(out_path, "w", encoding="utf-8") as fh:
+                fh.write(svg)
+            files.append(out_path)
+    return files
+
+
+# ─────────────────────────────────────────────
+#  PHASE 3 — RENDU DEPUIS LA STRUCTURE SEULE (voie vectorielle/éditable)
+# ─────────────────────────────────────────────
+def _load_font(px):
+    for name in ("DejaVuSans.ttf", "Arial.ttf", "arial.ttf"):
+        try:
+            return ImageFont.truetype(name, max(1, px))
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def render_structure(page) -> np.ndarray:
+    """Redessine UNIQUEMENT depuis la structure (fond + régions + texte).
+    C'est la régénération 'éditable' approximative (sans base ni résidu)."""
+    w, h = page["width"], page["height"]
+    st = page.get("structure", {})
+    bg = st.get("background_color", [255, 255, 255])
+    img = Image.new("RGB", (w, h), tuple(bg))
+    draw = ImageDraw.Draw(img)
+    for r in st.get("vector_regions", []):
+        draw.rectangle([r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]], fill=tuple(r["color"]))
+    txt = st.get("text", {})
+    if txt.get("available"):
+        for word_ in txt.get("words", []):
+            font = _load_font(int(word_["h"]))
+            draw.text((word_["x"], word_["y"]), word_["text"],
+                      fill=tuple(word_["color"]), font=font)
+    return np.asarray(img, dtype=np.uint8)
+
+
+def render_from_spec(spec_path, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    results = []
+    with zipfile.ZipFile(spec_path, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        stem = os.path.splitext(os.path.basename(manifest.get("source", "image")))[0]
+        for page in manifest["pages"]:
+            rendered = render_structure(page)
+            faithful = _recon_page(zf, page)
+            out_path = os.path.join(out_dir, f"{stem}_structonly_p{page['index']:03d}.png")
+            Image.fromarray(rendered, "RGB").save(out_path)
+            results.append((out_path, ssim(faithful, rendered)))
+    return results
 
 
 # ─────────────────────────────────────────────
@@ -388,6 +521,22 @@ def cmd_roundtrip(args):
     print(f"\nRégénérations : {out_dir}\nSpécification : {spec}")
 
 
+def cmd_svg(args):
+    out_dir = args.output or (os.path.splitext(args.input)[0] + "_svg")
+    files = export_svg(args.input, out_dir)
+    print(f"{len(files)} SVG hybride(s) écrit(s) dans : {out_dir}")
+    for f in files:
+        print(f"  {f}  ({_human(os.path.getsize(f))})")
+
+
+def cmd_render(args):
+    out_dir = args.output or (os.path.splitext(args.input)[0] + "_structonly")
+    results = render_from_spec(args.input, out_dir)
+    print(f"Rendu structure seule (vs raster fidèle) dans : {out_dir}")
+    for path, s in results:
+        print(f"  {path}  SSIM_vs_fidèle={s:.4f}")
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="docspec — image/PDF -> spécification rejouable (base WebP + résidu "
@@ -410,6 +559,12 @@ def main():
     pdc.set_defaults(func=cmd_decode)
     prt = sub.add_parser("roundtrip", parents=[common]); prt.add_argument("input")
     prt.set_defaults(func=cmd_roundtrip)
+    psvg = sub.add_parser("svg", help="Exporte un SVG hybride (image fidèle + texte éditable)")
+    psvg.add_argument("input", help="fichier .imgspec"); psvg.add_argument("-o", "--output")
+    psvg.set_defaults(func=cmd_svg)
+    prn = sub.add_parser("render", help="Rendu depuis la structure seule (voie éditable)")
+    prn.add_argument("input", help="fichier .imgspec"); prn.add_argument("-o", "--output")
+    prn.set_defaults(func=cmd_render)
 
     args = ap.parse_args()
     if not hasattr(args, "input") or not os.path.isfile(args.input):
