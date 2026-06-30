@@ -305,11 +305,27 @@ def extract_vector_shapes(rgb, n_colors, max_long=300, min_area_frac=0.002, max_
     return shapes
 
 
+def _get_tesseract():
+    """Importe pytesseract et localise le binaire tesseract (PATH, env, chemins Windows)."""
+    import shutil
+    import pytesseract
+    cmd = pytesseract.pytesseract.tesseract_cmd
+    ok = bool(shutil.which(cmd)) or (bool(cmd) and os.path.isfile(cmd))
+    if not ok:
+        for p in (os.environ.get("TESSERACT_CMD"),
+                  r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                  r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
+            if p and os.path.isfile(p):
+                pytesseract.pytesseract.tesseract_cmd = p
+                break
+    return pytesseract
+
+
 def extract_text(rgb, dpi):
     """OCR optionnel (Tesseract). Mots + position + taille de police + couleur.
     Langue selon la variable globale `ocr_lang` (ex. 'fra+eng'), avec repli auto."""
     try:
-        import pytesseract
+        pytesseract = _get_tesseract()
     except Exception as e:
         return {"available": False, "reason": (str(e).splitlines() or ["pytesseract indisponible"])[0]}
 
@@ -506,29 +522,40 @@ def reconstruct_text(structure):
     return "\n".join(out)
 
 
-def extract_text_file(spec_path, out_path):
-    """Écrit dans out_path le texte OCR reconstruit (toutes pages)."""
+def extract_text_file(spec_path, out_path, lang=None):
+    """Écrit dans out_path le texte OCR reconstruit (toutes pages).
+    Si une description ne contient pas de texte (OCR absent à l'encodage),
+    fait l'OCR À LA VOLÉE sur l'image reconstruite (Tesseract requis maintenant)."""
+    global ocr_lang
+    if lang:
+        ocr_lang = lang
     with zipfile.ZipFile(spec_path, "r") as zf:
         manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
-    pages = manifest.get("pages", [])
-    multi = len(pages) > 1
-    chunks, total_words, available = [], 0, False
-    for page in pages:
-        st = page.get("structure", {})
-        txt = reconstruct_text(st)
-        if txt is None:
-            continue
-        available = True
-        total_words += st.get("text", {}).get("n_words", 0)
-        if multi:
-            chunks.append(f"--- page {page['index'] + 1} ---\n{txt}")
-        else:
-            chunks.append(txt)
+        pages = manifest.get("pages", [])
+        dpi = manifest.get("global", {}).get("dpi") or DEFAULT_DPI
+        multi = len(pages) > 1
+        chunks, total_words, available, ocr_error = [], 0, False, None
+        for page in pages:
+            st = page.get("structure", {})
+            txt = st.get("text", {})
+            if not txt.get("available") or txt.get("n_words", 0) == 0:
+                # repli : OCR maintenant, sur l'image reconstruite
+                live = extract_text(_recon_page(zf, page), dpi)
+                if live.get("available"):
+                    st = dict(st); st["text"] = live
+                else:
+                    ocr_error = live.get("reason")
+            line = reconstruct_text(st)
+            if line is None:
+                continue
+            available = True
+            total_words += st.get("text", {}).get("n_words", 0)
+            chunks.append(f"--- page {page['index'] + 1} ---\n{line}" if multi else line)
     content = "\n\n".join(chunks)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(content)
-    return {"available": available, "n_words": total_words,
-            "n_pages": len(pages), "chars": len(content)}
+    return {"available": available, "n_words": total_words, "n_pages": len(pages),
+            "chars": len(content), "ocr_error": ocr_error}
 
 
 def _recon_page(zf, page):

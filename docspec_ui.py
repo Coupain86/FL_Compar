@@ -267,11 +267,17 @@ class DocspecUI(tk.Tk):
                 def done():
                     self._set_busy(False)
                     if not info["available"]:
-                        messagebox.showinfo(
-                            "Pas de texte",
-                            "Aucun texte OCR dans cette description.\n"
-                            "L'OCR (Tesseract) doit être installé AU MOMENT de générer la "
-                            "description. Installe-le puis régénère la description.")
+                        reason = info.get("ocr_error") or "raison inconnue"
+                        messagebox.showwarning(
+                            "OCR indisponible",
+                            "Impossible d'extraire du texte.\n\n"
+                            f"Détail : {reason}\n\n"
+                            "→ Installe Tesseract OCR (+ le pack français), puis reclique "
+                            "« Extraire le texte ». Pas besoin de refaire la description.\n\n"
+                            "Windows : installe Tesseract depuis "
+                            "github.com/UB-Mannheim/tesseract/wiki\n"
+                            "(coche « French » à l'installation), puis "
+                            "py -m pip install pytesseract")
                         return
                     self._status.set(f"Texte extrait : {os.path.basename(out)} "
                                      f"({info['n_words']} mots, {info['chars']} car.)")
