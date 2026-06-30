@@ -306,14 +306,30 @@ def extract_vector_shapes(rgb, n_colors, max_long=300, min_area_frac=0.002, max_
 
 
 def extract_text(rgb, dpi):
-    """OCR optionnel (Tesseract). Mots + position + taille de police + couleur."""
+    """OCR optionnel (Tesseract). Mots + position + taille de police + couleur.
+    Langue selon la variable globale `ocr_lang` (ex. 'fra+eng'), avec repli auto."""
     try:
         import pytesseract
-        data = pytesseract.image_to_data(Image.fromarray(rgb, "RGB"),
-                                          output_type=pytesseract.Output.DICT)
     except Exception as e:
-        msg = (str(e).splitlines() or ["pytesseract/tesseract indisponible"])[0]
-        return {"available": False, "reason": msg}
+        return {"available": False, "reason": (str(e).splitlines() or ["pytesseract indisponible"])[0]}
+
+    img = Image.fromarray(rgb, "RGB")
+
+    def _run(lang):
+        kw = {"output_type": pytesseract.Output.DICT}
+        if lang:
+            kw["lang"] = lang
+        return pytesseract.image_to_data(img, **kw)
+
+    used = ocr_lang
+    try:
+        data = _run(ocr_lang)
+    except Exception:
+        try:  # pack de langue absent -> repli sur la langue par défaut
+            data = _run(None)
+            used = "défaut"
+        except Exception as e:
+            return {"available": False, "reason": (str(e).splitlines() or ["tesseract indisponible"])[0]}
     words = []
     for i in range(len(data["text"])):
         t = data["text"][i].strip()
@@ -330,7 +346,8 @@ def extract_text(rgb, dpi):
         words.append({"text": t, "x": x, "y": y, "w": w, "h": h,
                       "font_pt": round(h * 72.0 / max(dpi, 1), 1),
                       "color": col, "conf": round(conf, 1)})
-    return {"available": True, "engine": "tesseract", "n_words": len(words), "words": words}
+    return {"available": True, "engine": "tesseract", "lang": used,
+            "n_words": len(words), "words": words}
 
 
 # ─────────────────────────────────────────────
@@ -418,14 +435,18 @@ def encode_page(rgb, lossless, quality, target_ssim, n_colors):
     return base_data, (residual[0] if residual else None), residual[1] if residual else None, page
 
 
-# variable globale simple pour passer le dpi à l'OCR (évite de tout re-câbler)
+# variables globales simples pour passer dpi/langue à l'OCR (évite de tout re-câbler)
 dpi_for_text = DEFAULT_DPI
+ocr_lang = "fra+eng"   # langue(s) OCR ; repli automatique si le pack est absent
 
 
 def encode(path, out_path, lossless=False, quality=DEFAULT_QUALITY,
-           target_ssim=DEFAULT_TARGET, n_colors=DEFAULT_COLORS, dpi=DEFAULT_DPI):
-    global dpi_for_text
+           target_ssim=DEFAULT_TARGET, n_colors=DEFAULT_COLORS, dpi=DEFAULT_DPI,
+           lang=None):
+    global dpi_for_text, ocr_lang
     dpi_for_text = dpi
+    if lang:
+        ocr_lang = lang
     pages, meta = ingest(path, dpi=dpi)
     manifest = {
         "format_version": FORMAT_VERSION,
@@ -453,6 +474,63 @@ def encode(path, out_path, lossless=False, quality=DEFAULT_QUALITY,
 # ─────────────────────────────────────────────
 #  DÉCODAGE
 # ─────────────────────────────────────────────
+def reconstruct_text(structure):
+    """Reconstruit un texte lisible (lignes + paragraphes) depuis les mots OCR."""
+    t = structure.get("text", {})
+    if not t.get("available"):
+        return None
+    words = t.get("words", [])
+    if not words:
+        return ""
+    hs = sorted(w["h"] for w in words)
+    hmed = hs[len(hs) // 2] or 10
+    ws = sorted(words, key=lambda w: (w["y"], w["x"]))
+    lines, cur, cur_y = [], [], None
+    for w in ws:
+        if cur_y is None or abs(w["y"] - cur_y) <= 0.6 * hmed:
+            cur.append(w)
+            cur_y = w["y"] if cur_y is None else cur_y
+        else:
+            lines.append(cur)
+            cur, cur_y = [w], w["y"]
+    if cur:
+        lines.append(cur)
+    out, prev_y = [], None
+    for ln in lines:
+        ln = sorted(ln, key=lambda w: w["x"])
+        y = min(w["y"] for w in ln)
+        if prev_y is not None and (y - prev_y) > 1.6 * hmed:
+            out.append("")  # saut de paragraphe
+        out.append(" ".join(w["text"] for w in ln))
+        prev_y = y
+    return "\n".join(out)
+
+
+def extract_text_file(spec_path, out_path):
+    """Écrit dans out_path le texte OCR reconstruit (toutes pages)."""
+    with zipfile.ZipFile(spec_path, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+    pages = manifest.get("pages", [])
+    multi = len(pages) > 1
+    chunks, total_words, available = [], 0, False
+    for page in pages:
+        st = page.get("structure", {})
+        txt = reconstruct_text(st)
+        if txt is None:
+            continue
+        available = True
+        total_words += st.get("text", {}).get("n_words", 0)
+        if multi:
+            chunks.append(f"--- page {page['index'] + 1} ---\n{txt}")
+        else:
+            chunks.append(txt)
+    content = "\n\n".join(chunks)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return {"available": available, "n_words": total_words,
+            "n_pages": len(pages), "chars": len(content)}
+
+
 def _recon_page(zf, page):
     """Reconstruit le raster fidèle d'une page (base + résidu)."""
     recon = base_from_webp(zf.read(page["base_layer"]["asset"]))
@@ -659,7 +737,7 @@ def _report_page(p):
 def cmd_encode(args):
     out = args.output or (os.path.splitext(args.input)[0] + ".imgspec")
     m = encode(args.input, out, lossless=args.lossless, quality=args.quality,
-               target_ssim=args.target, n_colors=args.colors, dpi=args.dpi)
+               target_ssim=args.target, n_colors=args.colors, dpi=args.dpi, lang=args.lang)
     print(f"Spécification écrite : {out}  ({_human(os.path.getsize(out))})")
     for p in m["pages"]:
         _report_page(p)
@@ -677,7 +755,7 @@ def cmd_roundtrip(args):
     spec = os.path.splitext(args.input)[0] + ".imgspec"
     print(f"== Encodage de {args.input} ==")
     m = encode(args.input, spec, lossless=args.lossless, quality=args.quality,
-               target_ssim=args.target, n_colors=args.colors, dpi=args.dpi)
+               target_ssim=args.target, n_colors=args.colors, dpi=args.dpi, lang=args.lang)
     print(f"  Source : {_human(os.path.getsize(args.input))}   "
           f"Spécification : {_human(os.path.getsize(spec))}   "
           f"Mode : {'LOSSLESS' if args.lossless else f'perceptuel (cible {args.target})'}")
@@ -710,6 +788,17 @@ def cmd_pdf(args):
     print(f"PDF cherchable écrit : {out}  ({_human(os.path.getsize(out))})")
 
 
+def cmd_text(args):
+    out = args.output or (os.path.splitext(args.input)[0] + ".txt")
+    info = extract_text_file(args.input, out)
+    if not info["available"]:
+        print("Aucun texte OCR dans cette description "
+              "(OCR indisponible à l'encodage : installe Tesseract puis ré-encode).")
+        return
+    print(f"Texte extrait : {out}  ({info['n_words']} mots, {info['chars']} caractères, "
+          f"{info['n_pages']} page(s))")
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="docspec — image/PDF -> spécification rejouable (base WebP + résidu "
@@ -725,6 +814,8 @@ def main():
                         help=f"Couleurs de la palette décrite (défaut : {DEFAULT_COLORS})")
     common.add_argument("--dpi", type=int, default=DEFAULT_DPI,
                         help=f"DPI de rasterisation des PDF (défaut : {DEFAULT_DPI})")
+    common.add_argument("--lang", default="fra+eng",
+                        help="Langue(s) OCR (défaut : fra+eng ; repli auto si pack absent)")
 
     pe = sub.add_parser("encode", parents=[common]); pe.add_argument("input"); pe.add_argument("-o", "--output")
     pe.set_defaults(func=cmd_encode)
@@ -741,6 +832,9 @@ def main():
     ppdf = sub.add_parser("pdf", help="PDF cherchable (image fidèle + couche texte OCR)")
     ppdf.add_argument("input", help="fichier .imgspec"); ppdf.add_argument("-o", "--output")
     ppdf.set_defaults(func=cmd_pdf)
+    ptxt = sub.add_parser("text", help="Extrait le texte OCR (.txt) depuis une description")
+    ptxt.add_argument("input", help="fichier .imgspec"); ptxt.add_argument("-o", "--output")
+    ptxt.set_defaults(func=cmd_text)
 
     args = ap.parse_args()
     if not hasattr(args, "input") or not os.path.isfile(args.input):

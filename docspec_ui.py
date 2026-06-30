@@ -60,6 +60,7 @@ class DocspecUI(tk.Tk):
         self._spec_out_var = tk.StringVar()   # .imgspec produit / à régénérer
         self._mode_var = tk.StringVar(value="exact")
         self._dpi_var = tk.IntVar(value=150)
+        self._lang_var = tk.StringVar(value="fra+eng")
         self._status = tk.StringVar(value="Prêt.")
         self._last_spec = None
         self._thumbs = {}  # anti-GC des images
@@ -87,6 +88,8 @@ class DocspecUI(tk.Tk):
                         value="leger").pack(side="left", padx=6)
         ttk.Label(opt, text="    DPI (PDF) :").pack(side="left")
         ttk.Spinbox(opt, from_=72, to=300, textvariable=self._dpi_var, width=6).pack(side="left")
+        ttk.Label(opt, text="    Langue OCR :").pack(side="left")
+        ttk.Entry(opt, textvariable=self._lang_var, width=9).pack(side="left")
 
         b1 = ttk.Frame(f1); b1.grid(row=2, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self._btn_describe = ttk.Button(b1, text="📝  Générer la description", command=self._describe)
@@ -105,6 +108,8 @@ class DocspecUI(tk.Tk):
         ttk.Button(f2, text="Parcourir…", command=self._browse_spec).grid(row=0, column=2)
         ttk.Button(f2, text="🔄  Régénérer l'image", command=self._regenerate).grid(
             row=1, column=0, sticky="w", pady=(10, 0))
+        ttk.Button(f2, text="📄  Extraire le texte (.txt)", command=self._extract_text).grid(
+            row=1, column=1, sticky="w", padx=6, pady=(10, 0))
 
         # Aperçus
         prev = ttk.LabelFrame(self, text="Aperçu", padding=10)
@@ -183,7 +188,8 @@ class DocspecUI(tk.Tk):
 
         def worker():
             try:
-                m = docspec.encode(src, out, lossless=lossless, target_ssim=0.99, dpi=dpi)
+                m = docspec.encode(src, out, lossless=lossless, target_ssim=0.99, dpi=dpi,
+                                   lang=self._lang_var.get().strip() or None)
                 # aperçus : original + régénéré + diff (page 0)
                 pages, _ = docspec.ingest(src, dpi=dpi)
                 orig = pages[0]
@@ -243,6 +249,41 @@ class DocspecUI(tk.Tk):
             _open_path(os.path.dirname(out) or ".")
         except Exception as e:
             messagebox.showerror("Erreur PDF", str(e))
+
+    def _extract_text(self):
+        if not DEPS_OK:
+            return
+        spec = self._spec_out_var.get()
+        if not spec or not os.path.isfile(spec):
+            messagebox.showwarning("Fichier manquant", "Choisis une description .imgspec.")
+            return
+        out = os.path.splitext(spec)[0] + ".txt"
+        self._set_busy(True, "Extraction du texte…")
+
+        def worker():
+            try:
+                info = docspec.extract_text_file(spec, out)
+
+                def done():
+                    self._set_busy(False)
+                    if not info["available"]:
+                        messagebox.showinfo(
+                            "Pas de texte",
+                            "Aucun texte OCR dans cette description.\n"
+                            "L'OCR (Tesseract) doit être installé AU MOMENT de générer la "
+                            "description. Installe-le puis régénère la description.")
+                        return
+                    self._status.set(f"Texte extrait : {os.path.basename(out)} "
+                                     f"({info['n_words']} mots, {info['chars']} car.)")
+                    _open_path(out)
+                self.after(0, done)
+            except Exception:
+                import traceback
+                tb = traceback.format_exc()
+                self.after(0, lambda: (self._set_busy(False, "Échec."),
+                                       messagebox.showerror("Erreur", tb.splitlines()[-1])))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # ── ② Régénérer ───────────────────────────
     def _regenerate(self):

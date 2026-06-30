@@ -39,6 +39,8 @@ py docspec.py decode  spec.imgspec           # régénère le PNG fidèle
 py docspec.py svg     spec.imgspec           # SVG hybride : image fidèle + texte/formes éditables
 py docspec.py render  spec.imgspec           # rendu depuis la structure seule (voie vectorielle)
 py docspec.py pdf     spec.imgspec           # PDF cherchable (image fidèle + couche texte OCR sélectionnable)
+py docspec.py text    spec.imgspec           # extrait UNIQUEMENT le texte (OCR) vers un .txt
+py docspec.py encode  scan.png --lang fra+eng # choisir la/les langue(s) OCR (lettre française = fra)
 ```
 
 ### Le conteneur `.imgspec`
