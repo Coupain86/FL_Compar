@@ -29,6 +29,7 @@ Usage :
     py docspec.py decode  sortie.imgspec -o dossier_sortie
     py docspec.py svg     sortie.imgspec              (SVG hybride : image fidèle + texte éditable)
     py docspec.py render  sortie.imgspec              (rendu depuis la structure seule = voie éditable)
+    py docspec.py pdf     sortie.imgspec              (PDF cherchable : image fidèle + couche texte OCR)
 """
 
 import argparse
@@ -545,6 +546,43 @@ def export_svg(spec_path, out_dir):
 
 
 # ─────────────────────────────────────────────
+#  PHASE 4 — EXPORT PDF CHERCHABLE (image fidèle + couche texte OCR invisible)
+# ─────────────────────────────────────────────
+def export_searchable_pdf(spec_path, out_path):
+    """Reconstruit un PDF où chaque page = raster fidèle + couche texte OCR
+    invisible (sélectionnable / cherchable), façon OCRmyPDF."""
+    if fitz is None:
+        raise SystemExit("PyMuPDF requis : pip install pymupdf")
+    with zipfile.ZipFile(spec_path, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        dpi = manifest.get("global", {}).get("dpi") or DEFAULT_DPI
+        k = 72.0 / dpi  # pixels -> points PDF
+        doc = fitz.open()
+        try:
+            for page in manifest["pages"]:
+                recon = _recon_page(zf, page)
+                h, w = recon.shape[:2]
+                pw, ph = w * k, h * k
+                pg = doc.new_page(width=pw, height=ph)
+                buf = io.BytesIO()
+                Image.fromarray(recon, "RGB").save(buf, format="PNG")
+                pg.insert_image(fitz.Rect(0, 0, pw, ph), stream=buf.getvalue())
+                txt = page.get("structure", {}).get("text", {})
+                if txt.get("available"):
+                    for word_ in txt.get("words", []):
+                        fs = max(1.0, word_["h"] * k)
+                        baseline = (word_["x"] * k, (word_["y"] + word_["h"]) * k)
+                        try:
+                            pg.insert_text(baseline, word_["text"], fontsize=fs, render_mode=3)
+                        except Exception:
+                            pass  # glyphe non rendable : on saute, l'image reste fidèle
+            doc.save(out_path, garbage=4, deflate=True)
+        finally:
+            doc.close()
+    return out_path
+
+
+# ─────────────────────────────────────────────
 #  PHASE 3 — RENDU DEPUIS LA STRUCTURE SEULE (voie vectorielle/éditable)
 # ─────────────────────────────────────────────
 def _load_font(px):
@@ -666,6 +704,12 @@ def cmd_render(args):
         print(f"  {path}  SSIM_vs_fidèle={s:.4f}")
 
 
+def cmd_pdf(args):
+    out = args.output or (os.path.splitext(args.input)[0] + "_cherchable.pdf")
+    export_searchable_pdf(args.input, out)
+    print(f"PDF cherchable écrit : {out}  ({_human(os.path.getsize(out))})")
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="docspec — image/PDF -> spécification rejouable (base WebP + résidu "
@@ -694,6 +738,9 @@ def main():
     prn = sub.add_parser("render", help="Rendu depuis la structure seule (voie éditable)")
     prn.add_argument("input", help="fichier .imgspec"); prn.add_argument("-o", "--output")
     prn.set_defaults(func=cmd_render)
+    ppdf = sub.add_parser("pdf", help="PDF cherchable (image fidèle + couche texte OCR)")
+    ppdf.add_argument("input", help="fichier .imgspec"); ppdf.add_argument("-o", "--output")
+    ppdf.set_defaults(func=cmd_pdf)
 
     args = ap.parse_args()
     if not hasattr(args, "input") or not os.path.isfile(args.input):
