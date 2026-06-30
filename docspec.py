@@ -40,6 +40,7 @@ import zipfile
 
 import base64
 import html
+from collections import deque
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -191,6 +192,118 @@ def _glyph_color(patch):
     return [int(c) for c in src.mean(0)]
 
 
+_NB8 = [(0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1)]  # horaire depuis l'ouest
+
+
+def _moore_trace(mask):
+    """Suivi de contour Moore (8-connexe, horaire). Retourne une liste de (x,y)."""
+    h, w = mask.shape
+    start = None
+    for y in range(h):
+        row = np.where(mask[y])[0]
+        if row.size:
+            start = (y, int(row[0])); break
+    if start is None:
+        return []
+    pts = [(start[1], start[0])]; cur = start; came = 0; steps = 0
+    maxs = 4 * int(mask.sum()) + 50
+    while steps < maxs:
+        steps += 1; found = False
+        for k in range(8):
+            idx = (came + 1 + k) % 8
+            ny, nx = cur[0] + _NB8[idx][0], cur[1] + _NB8[idx][1]
+            if 0 <= ny < h and 0 <= nx < w and mask[ny, nx]:
+                came = (idx + 4) % 8; cur = (ny, nx); pts.append((nx, ny)); found = True; break
+        if not found:
+            break
+        if cur == start and len(pts) > 2:
+            break
+    return pts
+
+
+def _perp(p, a, b):
+    (x, y), (x1, y1), (x2, y2) = p, a, b
+    dx, dy = x2 - x1, y2 - y1
+    den = (dx * dx + dy * dy) ** 0.5
+    if den == 0:
+        return ((x - x1) ** 2 + (y - y1) ** 2) ** 0.5
+    return abs(dy * x - dx * y + x2 * y1 - y2 * x1) / den
+
+
+def _rdp(pts, eps):
+    """Simplification Douglas–Peucker d'une polyligne."""
+    if len(pts) < 3:
+        return pts
+    a, b = pts[0], pts[-1]; dmax = 0.0; idx = 0
+    for i in range(1, len(pts) - 1):
+        d = _perp(pts[i], a, b)
+        if d > dmax:
+            dmax, idx = d, i
+    if dmax > eps:
+        return _rdp(pts[:idx + 1], eps)[:-1] + _rdp(pts[idx:], eps)
+    return [a, b]
+
+
+def _components(mask, min_area):
+    """Composantes connexes 4-connexes (>= min_area pixels)."""
+    h, w = mask.shape
+    seen = np.zeros_like(mask)
+    comps = []
+    ys, xs = np.where(mask)
+    for sy, sx in zip(ys, xs):
+        if seen[sy, sx]:
+            continue
+        q = deque([(sy, sx)]); seen[sy, sx] = True; cells = []
+        while q:
+            cy, cx = q.popleft(); cells.append((cy, cx))
+            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                ny, nx = cy + dy, cx + dx
+                if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True; q.append((ny, nx))
+        if len(cells) >= min_area:
+            comps.append(cells)
+    return comps
+
+
+def extract_vector_shapes(rgb, n_colors, max_long=300, min_area_frac=0.002, max_shapes=60):
+    """Trace les FORMES d'aplats (hors fond) en polygones (contour + simplification).
+    Travaille en résolution réduite pour rester rapide et robuste."""
+    h, w = rgb.shape[:2]
+    scale = max(1.0, max(h, w) / max_long)
+    sw, sh = max(1, int(w / scale)), max(1, int(h / scale))
+    small = np.asarray(Image.fromarray(rgb, "RGB").resize((sw, sh), Image.NEAREST))
+    pal = Image.fromarray(small, "RGB").quantize(colors=n_colors, method=Image.MEDIANCUT, dither=Image.NONE)
+    idx = np.asarray(pal)
+    raw = pal.getpalette() or []
+    counts = np.bincount(idx.ravel())
+    bg_idx = int(np.argmax(counts))
+    min_area = max(20, int(min_area_frac * sw * sh))
+    shapes = []
+    for ci in np.argsort(counts)[::-1]:
+        if counts[ci] == 0 or ci == bg_idx:
+            continue
+        mask = (idx == ci)
+        for cells in _components(mask, min_area):
+            sub = np.zeros_like(mask)
+            arr = np.array(cells)
+            sub[arr[:, 0], arr[:, 1]] = True
+            simp = _rdp(_moore_trace(sub), 2.0)
+            if len(simp) < 3:
+                continue
+            col = raw[int(ci) * 3:int(ci) * 3 + 3]
+            shapes.append({
+                "color": [int(c) for c in col],
+                "points": [[round(px * scale, 1), round(py * scale, 1)] for px, py in simp],
+                "area": int(len(cells) * scale * scale),
+            })
+            if len(shapes) >= max_shapes:
+                break
+        if len(shapes) >= max_shapes:
+            break
+    shapes.sort(key=lambda s: -s["area"])
+    return shapes
+
+
 def extract_text(rgb, dpi):
     """OCR optionnel (Tesseract). Mots + position + taille de police + couleur."""
     try:
@@ -276,6 +389,7 @@ def encode_page(rgb, lossless, quality, target_ssim, n_colors):
 
     palette, background = extract_palette(rgb, n_colors)
     regions = extract_vector_regions(rgb)
+    shapes = extract_vector_shapes(rgb, n_colors)
     text = extract_text(rgb, dpi_for_text)
 
     h, w = rgb.shape[:2]
@@ -292,6 +406,8 @@ def encode_page(rgb, lossless, quality, target_ssim, n_colors):
             "palette": palette,
             "vector_regions": regions,
             "n_vector_regions": len(regions),
+            "vector_shapes": shapes,
+            "n_vector_shapes": len(shapes),
             "text": text,
         },
         "fidelity": {"ssim": round(ssim(rgb, recon), 5),
@@ -395,12 +511,19 @@ def build_svg(recon_rgb, page) -> str:
                       f'fill="{_hex(word_["color"])}" fill-opacity="0" '
                       f'font-family="sans-serif">{html.escape(word_["text"])}</text>')
 
+    # Formes polygonales (couche vectorielle éditable, masquée par défaut)
+    polys = "".join(
+        '<polygon points="{}" fill="{}"/>'.format(
+            " ".join(f"{p[0]},{p[1]}" for p in s["points"]), _hex(s["color"]))
+        for s in st.get("vector_shapes", []))
+
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
         f'viewBox="0 0 {w} {h}">\n'
         f'  <image x="0" y="0" width="{w}" height="{h}" '
         f'href="data:image/png;base64,{png_b64}"/>\n'
         f'  <g id="vector_regions" display="none">{rects}</g>\n'
+        f'  <g id="vector_shapes" display="none">{polys}</g>\n'
         f'  <g id="text_layer">{words}</g>\n'
         f'</svg>\n')
 
@@ -441,8 +564,14 @@ def render_structure(page) -> np.ndarray:
     bg = st.get("background_color", [255, 255, 255])
     img = Image.new("RGB", (w, h), tuple(bg))
     draw = ImageDraw.Draw(img)
-    for r in st.get("vector_regions", []):
-        draw.rectangle([r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]], fill=tuple(r["color"]))
+    shapes = st.get("vector_shapes", [])
+    if shapes:  # voie vectorielle riche : polygones (grand -> petit)
+        for s in sorted(shapes, key=lambda s: -s.get("area", 0)):
+            if len(s["points"]) >= 3:
+                draw.polygon([(p[0], p[1]) for p in s["points"]], fill=tuple(s["color"]))
+    else:       # repli : rectangles d'aplats
+        for r in st.get("vector_regions", []):
+            draw.rectangle([r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"]], fill=tuple(r["color"]))
     txt = st.get("text", {})
     if txt.get("available"):
         for word_ in txt.get("words", []):
