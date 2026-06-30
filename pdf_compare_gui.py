@@ -274,6 +274,8 @@ class TabConfig(ttk.Frame):
         self._app._zones_lbl = ttk.Label(frm_btn, text="", foreground="#e74c3c", font=("Segoe UI", 8))
         self._app._zones_lbl.pack(side="left")
         ttk.Button(frm_btn, text="Ouvrir rapport", command=self._app._open_report).pack(side="right")
+        ttk.Button(frm_btn, text="🧬 Exporter spécification (docspec)",
+                   command=self._app._export_docspec).pack(side="right", padx=8)
 
         # ── Progression ───────────────────────
         ttk.Label(self, textvariable=self._app._progress_lbl, foreground="#555").pack(anchor="w", padx=10)
@@ -1840,6 +1842,44 @@ class App(tk.Tk):
         if not path.lower().endswith(".html"): path = os.path.splitext(path)[0]+".html"
         if os.path.isfile(path): webbrowser.open(f"file://{os.path.abspath(path)}")
         else: messagebox.showinfo("Rapport introuvable", f"Le fichier n'existe pas encore :\n{path}")
+
+    def _export_docspec(self):
+        """Exporte la spécification rejouable (docspec) + le SVG hybride du PDF/image Référence."""
+        ref = self._ref_var.get()
+        if not ref or not os.path.isfile(ref):
+            messagebox.showwarning("Fichier manquant",
+                                   "Sélectionne d'abord un PDF/image dans Référence.")
+            return
+        out = os.path.splitext(ref)[0] + ".imgspec"
+        svg_dir = os.path.splitext(ref)[0] + "_svg"
+        dpi = self._dpi_var.get()
+
+        def worker():
+            try:
+                import docspec
+                self._log_append(f"\n[docspec] Encodage de {os.path.basename(ref)} (DPI {dpi})…\n", "warn")
+                m = docspec.encode(ref, out, lossless=False, target_ssim=0.99, dpi=dpi)
+                docspec.export_svg(out, svg_dir)
+                pages = m.get("pages", [])
+                ssim_avg = sum(p["fidelity"]["ssim"] for p in pages) / max(1, len(pages))
+                self._log_append(f"[docspec] Spécification : {out}\n", "ok")
+                self._log_append(f"[docspec] SVG hybride    : {svg_dir}\n", "ok")
+                self._log_append(f"[docspec] {len(pages)} page(s), SSIM moyen {ssim_avg:.4f}\n", "ok")
+                self.after(0, lambda: messagebox.showinfo(
+                    "docspec",
+                    f"Spécification écrite :\n{out}\n\nSVG hybride (éditable) :\n{svg_dir}\n\n"
+                    f"{len(pages)} page(s) — fidélité moyenne SSIM {ssim_avg:.4f}"))
+            except ImportError:
+                self.after(0, lambda: messagebox.showerror(
+                    "docspec introuvable",
+                    "Le fichier docspec.py doit être dans le même dossier que l'application."))
+            except Exception:
+                import traceback
+                tb = traceback.format_exc()
+                self._log_append(f"[docspec] ERREUR\n{tb}\n", "error")
+                self.after(0, lambda: messagebox.showerror("docspec", "Échec — voir le journal."))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # ── Préférences ───────────────────────────
     def _save_prefs(self):
