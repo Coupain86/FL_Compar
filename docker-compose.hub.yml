@@ -39,7 +39,7 @@ services:
   web:
     build:
       # Le code est récupéré directement depuis GitHub par Docker :
-      context: https://github.com/Coupain86/FL_Compar.git#refs/heads/claude/analyze-new-app-j2k0r0
+      context: https://github.com/Coupain86/FL_Compar.git
     ports:
       - "8000:8000"
     environment:
