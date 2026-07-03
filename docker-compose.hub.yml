@@ -1,18 +1,17 @@
-# TrustRate — lancement local, SANS rien d'autre sur votre poste que ce fichier.
+# TrustRate — lancement local avec CE FICHIER UNIQUEMENT sur votre poste.
 #
-#   docker compose -f docker-compose.hub.yml up --build
+#   docker compose -f docker-compose.hub.yml up
 #
-# Docker va chercher lui-même le code sur GitHub, construit l'image, lance la
-# base PostgreSQL et le site. Tout vit dans Docker (images, base de données),
-# rien n'est écrit à côté de ce fichier.
+# AUCUNE construction d'image : Docker télécharge des images officielles
+# (Python, PostgreSQL) puis le conteneur récupère lui-même le code TrustRate
+# depuis GitHub et démarre. Tout vit dans Docker.
 #
 #   Le site        : http://localhost:8000
 #   Le back-office : http://localhost:8000/admin   (admin / admin)
 #
+# Premier démarrage : ~2 minutes (installation dans le conteneur).
 # Mise à jour après un changement du code sur GitHub :
-#   docker compose -f docker-compose.hub.yml build --no-cache web
-#   docker compose -f docker-compose.hub.yml up
-#
+#   docker compose -f docker-compose.hub.yml up --force-recreate
 # Tout arrêter : Ctrl+C puis
 #   docker compose -f docker-compose.hub.yml down        (garde la base)
 #   docker compose -f docker-compose.hub.yml down -v     (efface aussi la base)
@@ -37,9 +36,7 @@ services:
       retries: 12
 
   web:
-    build:
-      # Le code est récupéré directement depuis GitHub par Docker :
-      context: https://github.com/Coupain86/FL_Compar.git
+    image: python:3.12-slim
     ports:
       - "8000:8000"
     environment:
@@ -48,14 +45,28 @@ services:
       MIN_COHORT: "8"             # offres comparables minimum pour un verdict chiffré
       ADMIN_USER: admin
       ADMIN_PASSWORD: admin
+    command: >
+      bash -c "
+      apt-get update -qq &&
+      apt-get install -yqq --no-install-recommends tesseract-ocr tesseract-ocr-fra curl ca-certificates &&
+      curl -fsSL https://github.com/Coupain86/FL_Compar/archive/refs/heads/main.tar.gz -o /tmp/src.tgz &&
+      mkdir -p /srv && tar xzf /tmp/src.tgz -C /srv --strip-components=1 &&
+      cd /srv &&
+      pip install --no-cache-dir -q -r requirements.txt &&
+      exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+      "
+    volumes:
+      - pipcache:/root/.cache/pip
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/sante"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/sante || exit 1"]
       interval: 10s
       timeout: 3s
-      retries: 6
+      retries: 10
+      start_period: 180s
 
 volumes:
   pgdata:
+  pipcache:
