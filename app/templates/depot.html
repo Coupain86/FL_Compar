@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Déposez votre offre</h1>
+<p class="sub">PDF ou photo. On lit tout pour vous — rien à recopier.</p>
+
+{% if erreur %}<div class="alert err">{{ erreur }}</div>{% endif %}
+
+<form method="post" action="/comparer/analyser" enctype="multipart/form-data">
+  <input type="hidden" name="credit_type" value="{{ credit_type }}">
+
+  <div class="dropzone">
+    <p>Choisissez votre fichier</p>
+    <input type="file" name="fichier" accept=".pdf,.jpg,.jpeg,.png">
+    <p class="microcopy">Formats acceptés : PDF, JPG, PNG — 10 Mo max.
+      Une page suffit (l'offre de prêt ou les conditions).</p>
+  </div>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="card"><h3>✅ Ce qu'on garde</h3>
+      <p>Montant, durée, taux, TAEG, assurance, frais, banque, région.</p></div>
+    <div class="card"><h3>🗑️ Ce qu'on supprime aussitôt</h3>
+      <p>Votre nom, votre adresse, tout élément d'identité.
+         Le document lui-même n'est jamais conservé.</p></div>
+  </div>
+
+  <label class="consent">
+    <input type="checkbox" name="consentement">
+    <span>J'accepte que mon offre soit analysée pour établir mon comparatif.</span>
+  </label>
+
+  <button class="btn primary" type="submit">Analyser mon offre</button>
+  <p class="microcopy">Ces informations servent uniquement à vous comparer à des offres similaires.</p>
+</form>
+{% endblock %}

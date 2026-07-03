@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if bench %}
+<h1>Votre positionnement</h1>
+<div class="verdict">
+  <p class="big">Vous êtes mieux placé que <b>{{ bench.better_than_pct }}&nbsp;%</b> des profils similaires.</p>
+  <div class="gauge"><i style="width:{{ bench.better_than_pct }}%"></i></div>
+  <p class="microcopy">0 % = l'offre la plus chère · 100 % = la meilleure</p>
+</div>
+
+<div class="card">
+  <div class="kv"><span>Votre TAEG</span><b>{{ "%.2f"|format(offer.taeg) }} %</b></div>
+  <div class="kv"><span>Médiane des offres comparables</span><b>{{ "%.2f"|format(bench.median_taeg) }} %</b></div>
+  {% if bench.delta_taeg > 0 and bench.savings_estimate > 0 %}
+  <div class="kv"><span>Économie possible estimée</span><b>~ {{ "{:,.0f}".format(bench.savings_estimate).replace(",", " ") }} € sur la durée</b></div>
+  {% elif bench.delta_taeg <= 0 %}
+  <div class="kv"><span>Écart à la médiane</span><b>{{ "%.2f"|format(bench.delta_taeg) }} point — bonne offre</b></div>
+  {% endif %}
+</div>
+
+<div class="grid2">
+  {% if offer.rate_nominal and bench.median_nominal %}
+  <div class="card"><h3>Taux nominal
+    {% if offer.rate_nominal > bench.median_nominal %}<span class="badge">un peu élevé</span>{% endif %}</h3>
+    <p>{{ "%.2f"|format(offer.rate_nominal) }} % vs {{ "%.2f"|format(bench.median_nominal) }} % en médiane.</p></div>
+  {% endif %}
+  {% if bench.median_taea %}
+  <div class="card"><h3>Assurance
+    {% if offer.taea and offer.taea > bench.median_taea %}<span class="badge">chère</span>{% endif %}</h3>
+    <p>{% if offer.taea %}TAEA {{ "%.2f"|format(offer.taea) }} % vs {{ "%.2f"|format(bench.median_taea) }} % en médiane.
+       {% else %}Non renseignée — c'est souvent le premier poste d'économie.{% endif %}
+       Piste : la délégation d'assurance.</p></div>
+  {% endif %}
+</div>
+
+<div class="transp">📊 Comparé à <b>{{ bench.cohort_size }} offres {{ type_label|lower }} similaires</b>
+  ({{ offer.region }}, profil proche), déposées sur les {{ (bench.window_days / 30)|round|int }} derniers mois.
+  Il s'agit d'une <b>estimation</b>, pas d'une garantie : les taux réels dépendent d'une étude de votre dossier.</div>
+
+{% else %}
+<h1>Votre analyse</h1>
+<div class="verdict thin">
+  <p class="big">Pas encore assez d'offres similaires pour vous situer précisément.</p>
+  <p class="microcopy">Il faut au moins {{ min_cohort }} offres comparables ({{ type_label|lower }}, {{ offer.region or "région non renseignée" }}).
+    Plus il y a d'offres déposées, plus c'est précis — parlez-en autour de vous.</p>
+</div>
+<div class="card">
+  <h3>Ce qu'on a vu dans votre offre</h3>
+  <p></p>
+  {% for note in notes %}<p style="margin:6px 0">• {{ note }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<h2 class="section">Que voulez-vous faire&nbsp;?</h2>
+
+<div class="card">
+  <h3>{% if bench %}📄 Recevoir mon rapport détaillé{% else %}🔔 Me prévenir dès qu'on peut me situer{% endif %}</h3>
+  <form method="post" action="/resultat/{{ offer.id }}/action">
+    <input type="hidden" name="kind" value="{{ 'rapport' if bench else 'alerte' }}">
+    <div class="field"><input type="email" name="contact" placeholder="votre@email.fr" required></div>
+    <button class="btn primary" type="submit">{{ "Recevoir le rapport" if bench else "M'alerter" }}</button>
+  </form>
+</div>
+
+{% if bench %}
+<div class="card">
+  <h3>🔔 Être alerté si une meilleure offre apparaît</h3>
+  <p>On vous prévient dès qu'une offre similaire plus avantageuse est déposée.</p>
+  <form method="post" action="/resultat/{{ offer.id }}/action">
+    <input type="hidden" name="kind" value="alerte">
+    <div class="field"><input type="email" name="contact" placeholder="votre@email.fr" required></div>
+    <button class="btn secondary" type="submit">Activer l'alerte</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>🤝 Être recontacté pour renégocier</h3>
+  <p>Un partenaire pourra vous proposer une meilleure offre.</p>
+  <form method="post" action="/resultat/{{ offer.id }}/action">
+    <input type="hidden" name="kind" value="recontact">
+    <label class="consent">
+      <input type="checkbox" required>
+      <span>J'accepte que mon contact soit transmis à un partenaire pour me proposer une offre.</span>
+    </label>
+    <div class="field"><input type="text" name="contact" placeholder="Téléphone ou email" required></div>
+    <button class="btn primary" type="submit">Être recontacté</button>
+    <p class="microcopy">Vous choisissez. Vous pouvez retirer votre accord à tout moment depuis « Mon espace ».</p>
+  </form>
+</div>
+
+<div class="btnrow">
+  <a class="btn secondary" href="/comparer">Comparer une autre offre</a>
+  <a class="btn secondary" href="/mon-espace">Mon espace</a>
+</div>
+{% endblock %}

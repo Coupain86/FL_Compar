@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dernière étape : votre profil</h1>
+<p class="sub">3 réponses rapides pour comparer à profil équivalent. Rien de nominatif.</p>
+
+<form method="post" action="/comparer/profil/{{ offer.id }}">
+  <div class="field">
+    <span class="lbl">Revenus nets mensuels du foyer</span>
+    <div class="chips">
+      {% for bracket in incomes %}
+      <label><input type="radio" name="income" value="{{ bracket }}"
+        {% if offer.income_bracket == bracket %}checked{% endif %}>{{ bracket }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if is_immo %}
+  <div class="field">
+    <span class="lbl">Apport</span>
+    <div class="chips">
+      {% for bracket in deposits %}
+      <label><input type="radio" name="deposit" value="{{ bracket }}"
+        {% if offer.deposit_bracket == bracket %}checked{% endif %}>{{ bracket }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="field">
+    <label for="region">Région</label>
+    <select name="region" id="region" required>
+      <option value="" disabled {% if not offer.region %}selected{% endif %}>Choisir…</option>
+      {% for r in regions %}
+      <option value="{{ r }}" {% if offer.region == r %}selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <button class="btn primary" type="submit">Voir mon positionnement</button>
+</form>
+{% endblock %}

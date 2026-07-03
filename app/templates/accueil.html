@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="center">
+  <h1>Payez-vous votre crédit trop cher&nbsp;?</h1>
+  <p class="sub">Comparez votre offre à de vraies offres similaires.
+    Gratuit, en 1 minute, sans créer de compte.</p>
+  <a class="btn primary" href="/comparer">Comparer mon offre</a>
+  <div class="reassure">
+    <span>🔒 Vos données restent protégées</span>
+    <span>⚡ Résultat immédiat</span>
+    <span>🙈 Aucune inscription</span>
+  </div>
+  {% if count %}<p class="proof">Déjà {{ "{:,}".format(count).replace(",", " ") }} offres analysées</p>{% endif %}
+</div>
+<div class="steps">
+  <div class="step"><b>Étape 1</b>Déposez votre offre (PDF ou photo)</div>
+  <div class="step"><b>Étape 2</b>On la lit pour vous — rien à recopier</div>
+  <div class="step"><b>Étape 3</b>Découvrez votre position et vos pistes d'économie</div>
+</div>
+{% endblock %}

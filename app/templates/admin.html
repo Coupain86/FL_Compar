@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block wrapclass %} wide{% endblock %}
+{% block content %}
+<h1>Pilotage</h1>
+
+<div class="tiles">
+  <div class="tile"><div class="num">{{ total_uploads }}</div><div class="l">Offres déposées</div></div>
+  <div class="tile"><div class="num">{{ confirmed }}</div><div class="l">Parcours complétés</div></div>
+  <div class="tile"><div class="num">{{ users }}</div><div class="l">Visiteurs (sessions)</div></div>
+  <div class="tile"><div class="num">{{ n_corrections }}</div><div class="l">Corrections utilisateurs</div></div>
+</div>
+
+<h2 class="section">Densité par cohorte — où le verdict est fiable</h2>
+<div class="tblwrap"><table>
+  <thead><tr><th>Type</th><th>Région</th><th>Offres comparables</th><th>Verdict</th></tr></thead>
+  <tbody>
+  {% for ctype, region, count in density %}
+    <tr>
+      <td>{{ type_labels.get(ctype, ctype) }}</td>
+      <td>{{ region or "—" }}</td>
+      <td>{{ count }}</td>
+      <td>{% if count >= min_cohort %}<span class="pill ok">fiable</span>
+          {% else %}<span class="pill warn">insuffisant (min {{ min_cohort }})</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">Aucune offre confirmée pour l'instant.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2 class="section">Corrections récentes — la boucle d'amélioration</h2>
+<p class="microcopy" style="margin-bottom:10px">Chaque ligne = un champ que l'extracteur avait mal lu (ou pas lu)
+  et que l'utilisateur a corrigé. C'est la matière première pour améliorer les règles.</p>
+<div class="tblwrap"><table>
+  <thead><tr><th>Date</th><th>Banque</th><th>Champ</th><th>Lu</th><th>Corrigé</th><th>Confiance</th><th>Règle d'origine</th></tr></thead>
+  <tbody>
+  {% for c in corrections %}
+    <tr>
+      <td>{{ c.created_at.strftime("%d/%m %H:%M") }}</td>
+      <td>{{ c.bank or "—" }}</td>
+      <td>{{ c.field }}</td>
+      <td>{{ c.extracted_value or "∅" }}</td>
+      <td>{{ c.corrected_value or "∅" }}</td>
+      <td>{{ "%.0f%%"|format(c.confidence * 100) if c.confidence is not none else "—" }}</td>
+      <td>{{ c.source_rule or "—" }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7">Aucune correction pour l'instant — bon signe, ou pas encore de dépôts.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2 class="section">Formats à améliorer en priorité</h2>
+<div class="tblwrap"><table>
+  <thead><tr><th>Banque</th><th>Corrections cumulées</th></tr></thead>
+  <tbody>
+  {% for bank, count in per_bank %}
+    <tr><td>{{ bank or "Banque non identifiée" }}</td><td>{{ count }}</td></tr>
+  {% else %}
+    <tr><td colspan="2">Rien à signaler.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

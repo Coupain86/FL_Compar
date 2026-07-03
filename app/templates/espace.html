@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Mes comparaisons</h1>
+
+{% if not items %}
+<div class="card">
+  <p>Vous n'avez pas encore comparé d'offre.</p>
+  <div class="btnrow"><a class="btn primary" href="/comparer">Comparer une offre</a></div>
+</div>
+{% endif %}
+
+{% for item in items %}
+<div class="card">
+  <h3>{{ item.type_label }}{% if item.offer.bank %} · {{ item.offer.bank }}{% endif %}</h3>
+  <p>
+    {{ item.offer.created_at.strftime("%d/%m/%Y") }}
+    {% if item.offer.taeg %} · TAEG {{ "%.2f"|format(item.offer.taeg) }} %{% endif %}
+    {% if item.bench %} · Mieux placé que {{ item.bench.better_than_pct }} %{% endif %}
+    {% if item.offer.status != "confirmed" %} · <span class="pill warn">à terminer</span>{% endif %}
+  </p>
+  <div class="btnrow">
+    {% if item.offer.status == "confirmed" %}
+    <a class="btn secondary" href="/resultat/{{ item.offer.id }}">Revoir</a>
+    {% else %}
+    <a class="btn secondary" href="/comparer/verifier/{{ item.offer.id }}">Reprendre</a>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% if consents %}
+<h2 class="section">Mes accords en cours</h2>
+{% for consent in consents %}
+<div class="card">
+  <p>
+    {% if consent.kind == "alerte" %}🔔 Alerte meilleure offre{% elif consent.kind == "recontact" %}🤝 Être recontacté{% else %}📄 Rapport{% endif %}
+    · {{ consent.contact }} · accordé le {{ consent.created_at.strftime("%d/%m/%Y") }}
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+
+<h2 class="section">Mes données</h2>
+<div class="card">
+  <p>Supprime définitivement vos offres, vos accords et vos coordonnées.</p>
+  <form method="post" action="/mon-espace/supprimer"
+        onsubmit="return confirm('Cette action supprime définitivement vos données. Continuer ?')">
+    <div class="btnrow"><button class="btn danger" type="submit">Supprimer mes données</button></div>
+  </form>
+</div>
+{% endblock %}

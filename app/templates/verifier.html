@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Voici ce qu'on a compris</h1>
+<p class="sub">Vérifiez et corrigez si besoin. Les champs à confirmer sont surlignés.</p>
+
+{% for w in warnings %}<div class="alert warn">{{ w }}</div>{% endfor %}
+
+<form method="post" action="/comparer/verifier/{{ offer.id }}">
+  <div class="field">
+    <label for="credit_type">Type de crédit</label>
+    <select name="credit_type" id="credit_type">
+      {% for value, label in [("immobilier","Immobilier"),("consommation","Consommation / Perso"),("auto","Auto"),("regroupement","Regroupement de crédits")] %}
+      <option value="{{ value }}" {% if offer.credit_type == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="grid2">
+    {% for row in rows %}
+    <div class="field {% if row.state != 'ok' %}warn{% endif %}">
+      <label for="{{ row.name }}">{{ row.label }}
+        {% if row.badge %}<span class="badge">{{ row.badge }}</span>{% endif %}</label>
+      {% if row.kind == "rate_type" %}
+      <select name="{{ row.name }}" id="{{ row.name }}">
+        <option value="" {% if not row.value %}selected{% endif %}>—</option>
+        <option value="fixe" {% if row.value == "fixe" %}selected{% endif %}>Fixe</option>
+        <option value="variable" {% if row.value == "variable" %}selected{% endif %}>Variable</option>
+      </select>
+      {% elif row.kind == "date" %}
+      <input type="date" name="{{ row.name }}" id="{{ row.name }}" value="{{ row.value }}">
+      {% else %}
+      <input type="text" name="{{ row.name }}" id="{{ row.name }}" value="{{ row.value }}"
+             {% if row.state == "missing" %}placeholder="Non trouvé — à saisir"{% endif %}
+             inputmode="{{ 'decimal' if row.kind in ('number','int') else 'text' }}">
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <p class="microcopy">💡 L'assurance est souvent sur un document séparé (l'offre d'assurance).
+    C'est le poste qui pèse le plus — prenez 10 secondes pour le renseigner (TAEA, en %).</p>
+
+  <div class="btnrow">
+    <button class="btn primary" type="submit">C'est correct, continuer</button>
+  </div>
+</form>
+{% endblock %}

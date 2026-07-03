@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Comparateur d'offres de crédit{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="inner">
+      <a class="logo" href="/">CréditCompare</a>
+      <nav>
+        <a href="/comparer">Comparer mon offre</a>
+        <a href="/mon-espace">Mon espace</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="wrap{% block wrapclass %}{% endblock %}">
+      {% if flash %}<div class="alert ok">{{ flash }}</div>{% endif %}
+      {% block content %}{% endblock %}
+      <p class="legal">Un crédit vous engage et doit être remboursé. Vérifiez vos capacités de
+        remboursement avant de vous engager. Les positionnements affichés sont des estimations
+        fondées sur les offres déposées par la communauté — jamais une garantie de taux.</p>
+    </div>
+  </main>
+</body>
+</html>
