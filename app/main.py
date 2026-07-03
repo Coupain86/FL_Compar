@@ -169,7 +169,8 @@ async def analyser(request: Request, db: Session = Depends(get_db),
     sid = _sid(request)
     offer = Offer(session_id=sid, status="draft",
                   credit_type=credit_type or result.get("credit_type"))
-    meta = {"warnings": result.warnings, "used_ocr": result.used_ocr, "fields": {}}
+    meta = {"filename": os.path.basename(fichier.filename or ""),
+            "warnings": result.warnings, "used_ocr": result.used_ocr, "fields": {}}
     for name, _label, _kind in VERIFY_FIELDS:
         e = result.fields.get(name)
         if e is not None:
@@ -242,6 +243,8 @@ async def verifier_post(offer_id: str, request: Request, db: Session = Depends(g
     meta_fields = (offer.extraction_meta or {}).get("fields", {})
 
     for name, _label, kind in VERIFY_FIELDS:
+        if name not in form:
+            continue  # champ non soumis ≠ champ vidé : on n'y touche pas
         try:
             new = _parse_value(kind, form.get(name, ""))
         except (ValueError, TypeError):
@@ -360,6 +363,43 @@ def _admin(credentials: HTTPBasicCredentials = Depends(_basic)):
         from fastapi import HTTPException
         raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Basic"})
     return credentials.username
+
+
+@app.get("/admin/export.json")
+def admin_export(request: Request, db: Session = Depends(get_db), _user: str = Depends(_admin)):
+    """Journal d'extraction exportable : pour chaque fichier déposé, ce que
+    l'extracteur a lu (valeur, confiance, règle), ce que l'utilisateur a
+    corrigé, et les valeurs finales. Sert à valider les résultats de test."""
+    from fastapi.responses import JSONResponse
+
+    offers = (db.query(Offer).filter(Offer.source == "upload")
+              .order_by(Offer.created_at.asc()).all())
+    out = []
+    for o in offers:
+        meta = o.extraction_meta or {}
+        corrections = db.query(Correction).filter(Correction.offer_id == o.id).all()
+        final = {}
+        for name, _label, _kind in VERIFY_FIELDS:
+            v = getattr(o, name)
+            final[name] = v.isoformat() if name == "offer_date" and v else v
+        final["credit_type"] = o.credit_type
+        final["region"] = o.region
+        out.append({
+            "fichier": meta.get("filename", "(inconnu)"),
+            "depose_le": o.created_at.isoformat(timespec="seconds"),
+            "statut": o.status,
+            "ocr_utilise": meta.get("used_ocr", False),
+            "avertissements": meta.get("warnings", []),
+            "extraction_brute": meta.get("fields", {}),
+            "corrections_utilisateur": [
+                {"champ": c.field, "lu": c.extracted_value, "corrige": c.corrected_value,
+                 "confiance": c.confidence, "regle": c.source_rule} for c in corrections],
+            "valeurs_finales": final,
+        })
+    payload = {"exporte_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+               "nb_fichiers": len(out), "offres": out}
+    return JSONResponse(payload, headers={
+        "Content-Disposition": "attachment; filename=trustrate_journal_extraction.json"})
 
 
 @app.get("/admin")
