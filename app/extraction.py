@@ -177,8 +177,15 @@ def _money(s: str) -> float:
     return float(s)
 
 
+# Contextes qui disqualifient (presque) une valeur : exemples réglementaires,
+# taux d'appel marketing, taux de sanction… Ce sont les grands pièges du réel.
+_NEGATIVE_CONTEXT = ("exemple", "representatif", "simulation", "promotionnel",
+                     "usure", "retard", "majore", "ancien", "actuel", "rachete")
+
+
 def _score(norm_text: str, start: int, labels) -> tuple[float, str]:
-    """Score d'un candidat = poids du mot-clé + bonus de proximité."""
+    """Score d'un candidat = poids du mot-clé + bonus de proximité,
+    fortement pénalisé si le contexte est celui d'un exemple/leurre."""
     window = norm_text[max(0, start - _WINDOW):start]
     best, src = 0.0, ""
     for kw, weight in labels:
@@ -188,11 +195,27 @@ def _score(norm_text: str, start: int, labels) -> tuple[float, str]:
             s = weight + max(0.0, proximity)
             if s > best:
                 best, src = s, kw
+    if best and any(neg in window for neg in _NEGATIVE_CONTEXT):
+        best *= 0.35
+        src += " (contexte suspect)"
     return best, src
 
 
 def _conf(score: float) -> float:
     return round(min(0.97, score / 4.0), 2)
+
+
+def _repetition_bonus(proposals):
+    """Une même valeur étiquetée plusieurs fois pour le même champ est presque
+    sûrement la vraie (le TAEG réel est répété : encadré, conditions, récap ;
+    l'« exemple représentatif », lui, n'apparaît qu'une fois)."""
+    counts = {}
+    for score, f_name, _pos, val, _src in proposals:
+        if score > 1.2:
+            counts[(f_name, val)] = counts.get((f_name, val), 0) + 1
+    return [(score + min(0.6, 0.3 * (counts.get((f_name, val), 1) - 1)),
+             f_name, pos, val, src)
+            for score, f_name, pos, val, src in proposals]
 
 
 def extract_fields(text: str) -> ExtractionResult:
@@ -210,6 +233,7 @@ def extract_fields(text: str) -> ExtractionResult:
             score, src = _score(norm, pos, labels)
             if score > 0.4:
                 proposals.append((score, f_name, pos, val, src))
+    proposals = _repetition_bonus(proposals)
     proposals.sort(key=lambda p: -p[0])
     used_pos, got = set(), set()
     for score, f_name, pos, val, src in proposals:
@@ -228,6 +252,7 @@ def extract_fields(text: str) -> ExtractionResult:
             score, src = _score(norm, pos, labels)
             if score > 0.8:
                 proposals.append((score, f_name, pos, val, src))
+    proposals = _repetition_bonus(proposals)
     proposals.sort(key=lambda p: -p[0])
     used_pos, got = set(), set()
     for score, f_name, pos, val, src in proposals:

@@ -30,42 +30,138 @@ OUT = os.path.join("samples", "hard")
 #  Mise en page
 # ─────────────────────────────────────────────
 class Page:
-    def __init__(self, doc, header, footer):
-        self.page = doc.new_page(width=595, height=842)
-        self.y = 60.0
-        self.footer = footer
-        if header:
-            self.page.insert_text((50, self.y), header, fontsize=8, color=(0.35, 0.35, 0.35))
-            self.y += 18
-        self.page.insert_text((50, 820), footer, fontsize=6.5, color=(0.45, 0.45, 0.45))
+    """Compositeur multi-pages : en-tête/pied répétés, saut de page automatique,
+    logo vectoriel couleur, bandeaux, tableaux zébrés (avec reprise d'en-tête)."""
+
+    def __init__(self, doc, header, footer, accent=(0.15, 0.35, 0.6)):
+        self.doc, self.header, self.footer, self.accent = doc, header, footer, accent
+        self.n = 0
+        self._new_page()
+
+    def _new_page(self):
+        self.n += 1
+        self.page = self.doc.new_page(width=595, height=842)
+        self.y = 62.0
+        if self.header:
+            self.page.insert_text((50, 38), self.header, fontsize=7.5, color=(0.35, 0.35, 0.35))
+            self.page.draw_line(fitz.Point(50, 44), fitz.Point(545, 44), width=0.5,
+                                color=(0.65, 0.65, 0.65))
+        self.page.insert_text((50, 820), f"{self.footer}  -  Page {self.n}",
+                              fontsize=6.5, color=(0.45, 0.45, 0.45))
+
+    def need(self, h):
+        if self.y + h > 792:
+            self._new_page()
+
+    def pagebreak(self):
+        self._new_page()
+
+    def logo(self, text, shape="square"):
+        self.need(56)
+        c = self.accent
+        if shape == "square":
+            self.page.draw_rect(fitz.Rect(50, self.y, 74, self.y + 24), fill=c)
+            self.page.draw_rect(fitz.Rect(56, self.y + 6, 68, self.y + 18), fill=(1, 1, 1))
+        elif shape == "circle":
+            self.page.draw_circle(fitz.Point(62, self.y + 12), 12, fill=c)
+            self.page.draw_circle(fitz.Point(62, self.y + 12), 5, fill=(1, 1, 1))
+        else:  # bars
+            for i in range(3):
+                self.page.draw_rect(fitz.Rect(50 + i * 9, self.y + 4 + i * 3,
+                                              56 + i * 9, self.y + 24), fill=c)
+        self.page.insert_text((84, self.y + 18), text, fontsize=17, color=c)
+        self.y += 44
+
+    def band(self, text):
+        self.need(34)
+        self.page.draw_rect(fitz.Rect(50, self.y - 6, 545, self.y + 14), fill=self.accent)
+        self.page.insert_text((58, self.y + 8), text, fontsize=10.5, color=(1, 1, 1))
+        self.y += 32
 
     def title(self, text, size=13):
+        self.need(30)
         self.y += 8
         self.page.insert_text((50, self.y), text, fontsize=size)
         self.page.draw_line(fitz.Point(50, self.y + 4), fitz.Point(545, self.y + 4), width=0.7)
         self.y += 20
 
     def para(self, text, size=8.6, indent=50, leading=11.4):
-        # découpe naïve à ~108 caractères par ligne
         words, line = text.split(), ""
         for w in words:
             if len(line) + len(w) + 1 > 108:
+                self.need(leading + 2)
                 self.page.insert_text((indent, self.y), line, fontsize=size)
                 self.y += leading
                 line = w
             else:
                 line = (line + " " + w).strip()
         if line:
+            self.need(leading + 2)
             self.page.insert_text((indent, self.y), line, fontsize=size)
             self.y += leading
 
     def kv(self, label, value, size=9.2):
+        self.need(16)
         self.page.insert_text((60, self.y), label, fontsize=size)
         self.page.insert_text((330, self.y), value, fontsize=size)
         self.y += 13.5
 
+    def box(self, lines, fill=(0.97, 0.94, 0.86), size=8.6):
+        h = 14 * len(lines) + 10
+        self.need(h + 6)
+        self.page.draw_rect(fitz.Rect(50, self.y - 8, 545, self.y + h - 12),
+                            fill=fill, color=self.accent, width=0.8)
+        for ln in lines:
+            self.page.insert_text((58, self.y + 4), ln, fontsize=size)
+            self.y += 14
+        self.y += 10
+
+    def table(self, headers, rows, widths, size=7.6):
+        xs = [50]
+        for w in widths:
+            xs.append(xs[-1] + w)
+
+        def head():
+            self.need(16)
+            self.page.draw_rect(fitz.Rect(50, self.y - 8, xs[-1], self.y + 4), fill=self.accent)
+            for x, htxt in zip(xs, headers):
+                self.page.insert_text((x + 3, self.y), htxt, fontsize=size, color=(1, 1, 1))
+            self.y += 13
+
+        head()
+        for i, row in enumerate(rows):
+            if self.y + 11 > 792:
+                self._new_page()
+                head()
+            if i % 2:
+                self.page.draw_rect(fitz.Rect(50, self.y - 7.5, xs[-1], self.y + 3),
+                                    fill=(0.93, 0.95, 0.97))
+            for x, cell in zip(xs, row):
+                self.page.insert_text((x + 3, self.y), cell, fontsize=size)
+            self.y += 10.6
+        self.y += 10
+
     def gap(self, h=8):
         self.y += h
+
+
+def eur(x):
+    return f"{x:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def amort_rows(principal, annual_pct, n_months, start):
+    """Tableau d'amortissement complet (vraies maths -> centaines de leurres)."""
+    r = annual_pct / 100 / 12
+    monthly = principal * r / (1 - (1 + r) ** -n_months)
+    rows, crd = [], principal
+    for k in range(1, n_months + 1):
+        it = crd * r
+        cap = monthly - it
+        crd = max(0.0, crd - cap)
+        m0 = start.month - 1 + k
+        d = date(start.year + m0 // 12, m0 % 12 + 1, min(start.day, 28))
+        rows.append((str(k), d.strftime("%d/%m/%Y"), eur(monthly), eur(it), eur(cap), eur(crd)))
+    return rows, monthly
 
 
 def doc_pdf(builder):
@@ -303,6 +399,218 @@ TRUTH_LBP = {"bank": "La Banque Postale", "credit_type": "immobilier", "rate_typ
              "taea": 0.48, "fees": 800.0, "total_cost": 84620.0, "offer_date": date(2026, 3, 17)}
 
 
+
+
+# ─────────────────────────────────────────────
+#  Documents "extrêmes" : multi-pages, logos, couleurs, pièges maximum
+# ─────────────────────────────────────────────
+def build_socgen_gros_dossier(doc):
+    p = Page(doc, "SOCIETE GENERALE - Credit Immobilier - Direction Clientele des Particuliers",
+             "Societe Generale SA au capital de 1 003 724 927,50 EUR - SIREN 552 120 222 RCS Paris - "
+             "ORIAS 07 022 493 - 29 bd Haussmann 75009 Paris", accent=(0.83, 0.09, 0.16))
+    # Page 1 - couverture
+    p.logo("SOCIETE GENERALE", "square")
+    p.band("OFFRE DE PRET IMMOBILIER N° SG-2026-1187-334907")
+    p.para("Emprunteurs : M. et Mme X (parts respectives 50/50). Objet : acquisition d'une residence "
+           "principale a Nantes (44). Notaire : Me Y, office notarial de Nantes. La presente offre est "
+           "emise le 05/05/2026 et demeure valable jusqu'au 19/05/2026. L'acceptation ne peut intervenir "
+           "avant l'expiration d'un delai de reflexion de 10 jours, soit au plus tot le 16/05/2026.")
+    p.gap()
+    p.title("SOMMAIRE", 10)
+    for line in ["1. Fiche d'information standardisee europeenne (FISE)",
+                 "2. Conditions particulieres du credit", "3. Tableau d'amortissement previsionnel",
+                 "4. Notice d'assurance emprunteur", "5. Conditions generales et mentions legales",
+                 "6. Acceptation de l'offre"]:
+        p.para(line, indent=62)
+    p.pagebreak()
+
+    # Page 2 - FISE avec EXEMPLE REPRESENTATIF (piege majeur : d'autres taux !)
+    p.band("1. FICHE D'INFORMATION STANDARDISEE EUROPEENNE")
+    p.para("La presente fiche a un caractere purement informatif. Les valeurs ci-dessous constituent un "
+           "exemple representatif au sens de la reglementation et NE constituent PAS les conditions de "
+           "votre credit, detaillees en section 2.")
+    p.box(["Exemple representatif : pour un credit immobilier de 200 000,00 EUR sur 240 mois,",
+           "taux debiteur fixe de 3,90 %, TAEG de 4,80 %, mensualite de 1 208,00 EUR,",
+           "cout total du credit de 98 456,00 EUR, assurance TAEA 0,61 %, frais de dossier 1 000,00 EUR."])
+    p.para("Le taux d'usure applicable s'etablit a 6,04 %. En cas d'impaye, taux majore de 3,00 points. "
+           "Indice de reference des prets a taux revisable : Euribor 12 mois, valeur 2,61 %.")
+    p.pagebreak()
+
+    # Page 3 - CONDITIONS PARTICULIERES (les vraies valeurs)
+    p.band("2. CONDITIONS PARTICULIERES DU CREDIT")
+    p.kv("Nature", "Pret immobilier amortissable a taux fixe")
+    p.kv("Montant du credit", "289 000,00 EUR")
+    p.kv("Duree", "264 mois (22 ans)")
+    p.kv("Taux debiteur fixe", "3,42 % l'an")
+    p.kv("Taux Annuel Effectif Global (TAEG)", "3,87 %")
+    p.kv("Taux Annuel Effectif de l'Assurance (TAEA)", "0,38 %")
+    p.kv("Frais de dossier", "1 150,00 EUR")
+    p.kv("Frais de garantie (Credit Logement)", "3 120,00 EUR")
+    p.kv("Cout total du credit", "121 743,44 EUR")
+    p.kv("Mensualite hors assurance", "1 561,02 EUR")
+    p.gap()
+    p.para("Le taux de periode mensuel s'etablit a 0,2850 %. Domiciliation des salaires demandee sur le "
+           "compte SG n° 30003 01187 00050078965 33 (IBAN FR76 3000 3011 8700 0500 7896 533).")
+    p.pagebreak()
+
+    # Pages 4-8 : TABLEAU D'AMORTISSEMENT COMPLET (264 lignes de leurres)
+    p.band("3. TABLEAU D'AMORTISSEMENT PREVISIONNEL")
+    p.para("Montants exprimes en euros, hors assurance. Tableau etabli sous reserve du deblocage complet "
+           "des fonds au 01/07/2026.")
+    rows, _m = amort_rows(289000.0, 3.42, 264, date(2026, 7, 1))
+    p.table(["N°", "Echeance", "Mensualite", "Interets", "Capital amorti", "Capital restant du"],
+            rows, [40, 85, 95, 95, 105, 115])
+
+    # Notice assurance (pleine de % leurres)
+    p.band("4. NOTICE D'ASSURANCE EMPRUNTEUR")
+    p.para("Contrat groupe Sogecap n° 2971. Garanties souscrites : deces (quotite 100 %), perte totale "
+           "et irreversible d'autonomie (quotite 100 %), incapacite temporaire totale au-dela d'une "
+           "franchise de 90 jours, invalidite permanente si taux d'invalidite superieur a 66 %. "
+           "Prise en charge partielle entre 33 % et 66 %. Cotisation mensuelle : 91,52 EUR. "
+           "Le Taux Annuel Effectif de l'Assurance (TAEA) ressort a 0,38 %, soit un cout total "
+           "d'assurance de 24 161,28 EUR sur la duree du pret. Possibilite de deleguation d'assurance "
+           "(lois Lagarde et Lemoine) sous reserve d'equivalence des garanties.")
+    p.pagebreak()
+
+    # Mentions legales + recap (repetition des VRAIES valeurs)
+    p.band("5. CONDITIONS GENERALES ET MENTIONS LEGALES")
+    p.para(LEGAL_COMMON)
+    p.para("Indemnite de remboursement anticipe : 3 % du capital restant du dans la limite de six mois "
+           "d'interets. Frais de mainlevee d'hypotheque le cas echeant : 380,00 EUR.")
+    p.gap()
+    p.band("6. ACCEPTATION - RECAPITULATIF")
+    p.box(["Recapitulatif de votre credit : montant du credit 289 000,00 EUR sur 264 mois,",
+           "taux debiteur fixe 3,42 %, TAEG 3,87 %, TAEA 0,38 %,",
+           "cout total du credit 121 743,44 EUR, frais de dossier 1 150,00 EUR."],
+          fill=(0.93, 0.97, 0.93))
+    p.para("Offre emise le 05/05/2026 par la Societe Generale. Signature precedee de la mention "
+           "manuscrite « lu et approuve, bon pour acceptation de l'offre ».")
+
+
+TRUTH_SG = {"bank": "Société Générale", "credit_type": "immobilier", "rate_type": "fixe",
+            "amount": 289000.0, "duration_months": 264, "rate_nominal": 3.42, "taeg": 3.87,
+            "taea": 0.38, "fees": 1150.0, "total_cost": 121743.44, "offer_date": date(2026, 5, 5)}
+
+
+def build_cofidis_promo(doc):
+    p = Page(doc, "COFIDIS - Credit et solutions de paiement - www.cofidis.fr",
+             "Cofidis SA au capital de 67 500 000 EUR - SIREN 325 307 106 RCS Lille Metropole - "
+             "Parc de la Haute Borne, 61 av Halley, 59866 Villeneuve-d'Ascq", accent=(0.78, 0.05, 0.1))
+    # Couverture avec PROMO piege (taux d'appel)
+    p.logo("cofidis", "circle")
+    p.band("OFFRE DE CONTRAT DE CREDIT - PRET PERSONNEL PROJET")
+    p.box(["OFFRE FLASH : taux debiteur promotionnel de 1,00 % pendant les 3 premiers mois,",
+           "puis taux contractuel. Offre promotionnelle soumise a conditions, reservee aux",
+           "nouveaux clients pour toute demande avant le 31/01/2026."],
+          fill=(1.0, 0.92, 0.92))
+    p.para("Offre emise le 11/01/2026. Dossier n° CF-2026-00441-887. Delai de retractation de 14 jours "
+           "calendaires. Taux applicable en cas de retard de paiement : 10,12 %. Le taux d'usure de la "
+           "categorie s'etablit a 12,55 %.")
+    p.pagebreak()
+
+    # Informations europeennes normalisees avec EXEMPLE piege
+    p.band("INFORMATIONS PRECONTRACTUELLES EUROPEENNES NORMALISEES")
+    p.para("Exemple representatif : un credit de 15 000,00 EUR sur 60 mois au taux debiteur fixe de "
+           "6,50 % correspond a un TAEG de 7,20 %, 60 mensualites de 293,49 EUR et un cout total du "
+           "credit de 2 609,40 EUR. Cet exemple ne constitue pas votre offre.")
+    p.gap()
+    p.band("CONDITIONS DE VOTRE CREDIT")
+    p.kv("Montant du credit", "9 500,00 EUR")
+    p.kv("Duree du contrat", "42 mois")
+    p.kv("Taux debiteur fixe", "5,49 %")
+    p.kv("Taux Annuel Effectif Global (TAEG)", "6,17 %")
+    p.kv("Frais de dossier", "0,00 EUR")
+    p.kv("Mensualite (hors assurance)", "252,82 EUR")
+    p.kv("Cout total du credit", "1 118,26 EUR")
+    p.kv("Montant total du", "10 618,26 EUR")
+    p.pagebreak()
+
+    # Assurance facultative (leurres %)
+    p.band("ASSURANCE FACULTATIVE")
+    p.para("Assurance DIM facultative. Garanties : deces (quotite 100 %), invalidite si taux superieur "
+           "a 66 %, maladie au-dela de 60 jours d'arret. Cout mensuel : 8,93 EUR. Taux Annuel Effectif "
+           "de l'Assurance (TAEA) : 1,25 %. L'adhesion n'est pas une condition d'octroi du credit.")
+    p.gap()
+    # Tableau d'amortissement complet
+    p.band("TABLEAU D'AMORTISSEMENT")
+    rows, _m = amort_rows(9500.0, 5.49, 42, date(2026, 2, 5))
+    p.table(["N°", "Echeance", "Mensualite", "Interets", "Capital", "Restant du"],
+            rows, [40, 85, 95, 95, 100, 110])
+
+    p.band("RECAPITULATIF")
+    p.box(["Votre credit : 9 500,00 EUR sur 42 mois - taux debiteur fixe 5,49 % - TAEG 6,17 %",
+           "TAEA 1,25 % - frais de dossier 0,00 EUR - cout total du credit 1 118,26 EUR."],
+          fill=(0.93, 0.97, 0.93))
+    p.para(LEGAL_COMMON)
+    p.para("Fait a Villeneuve-d'Ascq, le 11/01/2026.")
+
+
+TRUTH_COF = {"bank": "Cofidis", "credit_type": "consommation", "rate_type": "fixe",
+             "amount": 9500.0, "duration_months": 42, "rate_nominal": 5.49, "taeg": 6.17,
+             "taea": 1.25, "fees": 0.0, "total_cost": 1118.26, "offer_date": date(2026, 1, 11)}
+
+
+def build_banquepop_regroupement_dossier(doc):
+    p = Page(doc, "BANQUE POPULAIRE Val de France - Solutions de regroupement de credits",
+             "Banque Populaire Val de France - Societe cooperative - SIREN 549 800 373 - "
+             "9 av Newton 78180 Montigny-le-Bretonneux", accent=(0.0, 0.35, 0.65))
+    p.logo("BANQUE POPULAIRE", "bars")
+    p.band("OFFRE DE REGROUPEMENT DE CREDITS N° BP-2026-0455-112")
+    p.para("Offre emise le 30/04/2026, valable jusqu'au 14/05/2026. La presente operation de "
+           "regroupement de credits est assortie d'une garantie hypothecaire de premier rang sur le "
+           "bien situe a Tours (37), dont la valeur estimee par expertise s'etablit a 310 000,00 EUR.")
+    p.gap()
+    p.title("SITUATION AVANT REGROUPEMENT", 10)
+    p.para("Les engagements suivants seront rembourses par anticipation a la mise en place (taux "
+           "actuels constates au 15/04/2026) :")
+    p.table(["Organisme", "Nature", "Solde (EUR)", "Taux actuel", "Mensualite (EUR)"],
+            [("FLOA Bank", "Credit renouvelable", "8 442,17", "15,90 %", "312,00"),
+             ("Cofidis", "Pret personnel", "12 380,50", "11,20 %", "298,45"),
+             ("CIC", "Credit auto", "9 926,00", "6,75 %", "245,10"),
+             ("Oney", "Paiement fractionne", "2 151,33", "9,90 %", "89,60"),
+             ("Franfinance", "Credit travaux", "18 000,00", "4,10 %", "340,22")],
+            [110, 120, 90, 85, 90], size=8.2)
+    p.para("Total des soldes rachetes : 50 900,00 EUR. Indemnites de remboursement anticipe estimees : "
+           "612,40 EUR. Tresorerie complementaire : 23 387,60 EUR.")
+    p.pagebreak()
+
+    p.band("CONDITIONS DU NOUVEAU CREDIT")
+    p.kv("Montant du credit", "74 900,00 EUR")
+    p.kv("Duree", "144 mois (12 ans)")
+    p.kv("Taux debiteur fixe", "4,95 %")
+    p.kv("Taux Annuel Effectif Global (TAEG)", "5,74 %")
+    p.kv("Taux Annuel Effectif de l'Assurance (TAEA)", "0,72 %")
+    p.kv("Frais de dossier", "1 490,00 EUR")
+    p.kv("Frais d'inscription hypothecaire", "1 123,00 EUR")
+    p.kv("Cout total du credit", "24 862,12 EUR")
+    p.kv("Mensualite assurance comprise", "731,17 EUR")
+    p.gap()
+    p.para("Reglement par prelevement sur le compte IBAN FR76 1020 7000 4104 0410 5678 921. Frais de "
+           "notaire et de mainlevee eventuels non compris. Nouvelle mensualite totale ramenee de "
+           "1 285,37 EUR a 731,17 EUR, soit une baisse de 43 %, en contrepartie d'un allongement de la "
+           "duree de remboursement et d'une augmentation du cout total du credit.")
+    p.pagebreak()
+
+    p.band("TABLEAU D'AMORTISSEMENT PREVISIONNEL")
+    rows, _m = amort_rows(74900.0, 4.95, 144, date(2026, 6, 5))
+    p.table(["N°", "Echeance", "Mensualite", "Interets", "Capital amorti", "Capital restant du"],
+            rows, [40, 85, 95, 95, 105, 115])
+
+    p.band("RECAPITULATIF ET ACCEPTATION")
+    p.box(["Nouveau credit : montant du credit 74 900,00 EUR sur 144 mois,",
+           "taux debiteur fixe 4,95 % - TAEG 5,74 % - TAEA 0,72 %,",
+           "frais de dossier 1 490,00 EUR - cout total du credit 24 862,12 EUR."],
+          fill=(0.93, 0.97, 0.93))
+    p.para("Attention : regrouper des credits peut allonger la duree de remboursement et augmenter le "
+           "cout total du credit. " + LEGAL_COMMON)
+    p.para("Fait a Tours, le 30/04/2026, en deux exemplaires originaux.")
+
+
+TRUTH_BP = {"bank": "Banque Populaire", "credit_type": "regroupement", "rate_type": "fixe",
+            "amount": 74900.0, "duration_months": 144, "rate_nominal": 4.95, "taeg": 5.74,
+            "taea": 0.72, "fees": 1490.0, "total_cost": 24862.12, "offer_date": date(2026, 4, 30)}
+
+
 DOCS = [
     ("credit_agricole_immobilier.pdf", build_credit_agricole, TRUTH_CA, False),
     ("bnp_immobilier_variable.pdf", build_bnp_variable, TRUTH_BNP, False),
@@ -310,6 +618,9 @@ DOCS = [
     ("caisse_epargne_regroupement.pdf", build_caisse_epargne_regroupement, TRUTH_CE, False),
     ("boursobank_auto.pdf", build_bourso_auto, TRUTH_BB, False),
     ("banque_postale_immobilier_SCAN.pdf", build_lbp_scan, TRUTH_LBP, True),
+    ("socgen_immobilier_GROS_DOSSIER.pdf", build_socgen_gros_dossier, TRUTH_SG, False),
+    ("cofidis_promo_piege.pdf", build_cofidis_promo, TRUTH_COF, False),
+    ("banquepop_regroupement_DOSSIER.pdf", build_banquepop_regroupement_dossier, TRUTH_BP, False),
 ]
 
 
