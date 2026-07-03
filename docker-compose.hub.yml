@@ -1,16 +1,25 @@
-# Lancement local pour tester :
+# TrustRate — lancement local, SANS rien d'autre sur votre poste que ce fichier.
+#
 #   docker compose -f docker-compose.hub.yml up --build
-# puis ouvrir http://localhost:8000  (back-office : http://localhost:8000/admin, admin/admin)
 #
-# Deux services :
-#   db  — PostgreSQL officiel (image Docker Hub), données persistées dans un volume
-#   web — l'application (construite depuis le Dockerfile), seedée avec des offres
-#         de démonstration au premier démarrage (SEED_ON_START=1)
+# Docker va chercher lui-même le code sur GitHub, construit l'image, lance la
+# base PostgreSQL et le site. Tout vit dans Docker (images, base de données),
+# rien n'est écrit à côté de ce fichier.
 #
-# Identifiants ci-dessous = développement local UNIQUEMENT. À changer avant toute
-# exposition hors de votre machine.
+#   Le site        : http://localhost:8000
+#   Le back-office : http://localhost:8000/admin   (admin / admin)
+#
+# Mise à jour après un changement du code sur GitHub :
+#   docker compose -f docker-compose.hub.yml build --no-cache web
+#   docker compose -f docker-compose.hub.yml up
+#
+# Tout arrêter : Ctrl+C puis
+#   docker compose -f docker-compose.hub.yml down        (garde la base)
+#   docker compose -f docker-compose.hub.yml down -v     (efface aussi la base)
+#
+# Identifiants ci-dessous = développement local UNIQUEMENT.
 
-name: comparateur-credit
+name: trustrate
 
 services:
   db:
@@ -28,13 +37,15 @@ services:
       retries: 12
 
   web:
-    build: .
+    build:
+      # Le code est récupéré directement depuis GitHub par Docker :
+      context: https://github.com/Coupain86/FL_Compar.git#claude/analyze-new-app-j2k0r0
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+psycopg2://credit:credit_local_dev@db:5432/credit
-      SEED_ON_START: "1"          # offres de démo + PDF d'exemple au 1er démarrage
-      MIN_COHORT: "8"             # nb minimal d'offres comparables pour un verdict chiffré
+      SEED_ON_START: "1"          # offres de démo au premier démarrage
+      MIN_COHORT: "8"             # offres comparables minimum pour un verdict chiffré
       ADMIN_USER: admin
       ADMIN_PASSWORD: admin
     depends_on:

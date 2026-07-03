@@ -1,0 +1,43 @@
+# TrustRate — variante développeur : construit depuis le dossier local (clone du dépôt).
+# Pour l'usage « un seul fichier sur mon poste », utilisez docker-compose.hub.yml.
+#
+#   docker compose up --build
+
+name: trustrate
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: credit
+      POSTGRES_PASSWORD: credit_local_dev
+      POSTGRES_DB: credit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U credit -d credit"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://credit:credit_local_dev@db:5432/credit
+      SEED_ON_START: "1"
+      MIN_COHORT: "8"
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/sante"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+volumes:
+  pgdata:

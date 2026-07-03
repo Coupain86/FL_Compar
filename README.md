@@ -1,4 +1,4 @@
-# Comparateur d'offres de crédit — Phase 1 (benchmark)
+# TrustRate — comparateur d'offres de crédit (Phase 1 : benchmark)
 
 Un particulier dépose son offre de crédit (PDF ou photo). Le site la lit
 automatiquement (extraction déterministe, **sans IA**), la compare aux offres
@@ -13,8 +13,17 @@ corrections, densité par cohorte).
 
 Prérequis : Docker Desktop (ou Docker + le plugin compose).
 
+**Sans rien installer d'autre** — gardez uniquement `docker-compose.hub.yml`
+sur votre poste (Docker récupère le code sur GitHub et construit tout) :
+
 ```bash
 docker compose -f docker-compose.hub.yml up --build
+```
+
+**Depuis un clone du dépôt** (développement) :
+
+```bash
+docker compose up --build
 ```
 
 Puis :

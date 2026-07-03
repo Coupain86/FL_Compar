@@ -34,7 +34,7 @@ from . import extraction as ex
 from .db import Base, engine, get_db
 from .models import Consent, Correction, Offer
 
-app = FastAPI(title="Comparateur d'offres de crédit")
+app = FastAPI(title="TrustRate")
 
 _HERE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
