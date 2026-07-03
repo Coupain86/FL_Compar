@@ -49,11 +49,14 @@ BANKS = [
     "Carrefour Banque", "CCF", "HSBC", "AXA Banque", "Crédit du Nord",
 ]
 
+# Ordre = spécificité décroissante : un dossier de regroupement cite par nature
+# les anciens prêts (perso, auto…) qu'il rachète — il doit donc être testé en
+# premier ; « consommation » est le libellé le plus générique, testé en dernier.
 CREDIT_TYPES = {
-    "immobilier": ["prêt immobilier", "crédit immobilier", "immobilier", "acquisition", "hypothécaire"],
-    "consommation": ["prêt personnel", "crédit à la consommation", "crédit consommation", "prêt conso"],
-    "auto": ["crédit auto", "prêt auto", "financement automobile", "véhicule"],
     "regroupement": ["regroupement de crédits", "rachat de crédits", "restructuration"],
+    "immobilier": ["prêt immobilier", "crédit immobilier", "immobilier", "acquisition", "hypothécaire"],
+    "auto": ["crédit auto", "prêt auto", "financement automobile", "véhicule"],
+    "consommation": ["prêt personnel", "crédit à la consommation", "crédit consommation", "prêt conso"],
 }
 
 REGIONS = [
@@ -153,7 +156,7 @@ def _ocr(img) -> str:
 # ─────────────────────────────────────────────
 _PCT_RE = re.compile(r"(\d{1,2}(?:[.,]\d{1,3})?)\s*%")
 _EUR_RE = re.compile(
-    r"((?:\d{1,3}(?:[\s  .]\d{3})+|\d{3,7})(?:[.,]\d{2})?)\s*(?:€|eur(?:os?)?\b)")
+    r"((?:\d{1,3}(?:[\s  .]\d{3})+|\d{1,7})(?:[.,]\d{2})?)\s*(?:€|eur(?:os?)?\b)")
 _DUR_RE = re.compile(r"(\d{1,3})\s*(ans?\b|annees?\b|mois\b)")
 _DATE_RE = re.compile(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})\b")
 
