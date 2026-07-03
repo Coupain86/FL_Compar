@@ -660,6 +660,422 @@ TRUTH_CM = {"region": "Hauts-de-France", "bank": "Crédit Mutuel", "credit_type"
             "total_cost": 118240.0, "offer_date": date(2026, 6, 20), "n_sub_loans": 2}
 
 
+# ─────────────────────────────────────────────
+#  Vague v5 : assurance mélangée au crédit, valeurs éparpillées entre les
+#  pages ou reléguées en toute fin, murs de texte réglementaire.
+# ─────────────────────────────────────────────
+CGV_WALL = [
+    "Article 1 - Objet. Le present contrat a pour objet de definir les conditions dans lesquelles le "
+    "preteur consent a l'emprunteur le credit vise aux conditions particulieres. L'emprunteur reconnait "
+    "avoir recu, prealablement a la presente offre, la fiche d'information precontractuelle ainsi que la "
+    "notice d'information relative au contrat d'assurance de groupe, et avoir ete informe qu'il peut "
+    "souscrire une assurance equivalente aupres de l'assureur de son choix.",
+    "Article 2 - Deblocage des fonds. Les fonds seront verses en une ou plusieurs fois sur instruction "
+    "de l'emprunteur, au plus tard dans les quatre mois de l'acceptation. A defaut d'utilisation dans ce "
+    "delai, l'offre sera caduque et les sommes eventuellement versees devront etre restituees sans delai, "
+    "majorees des interets courus calcules prorata temporis sur la base d'une annee de 360 jours.",
+    "Article 3 - Remboursement anticipe. L'emprunteur peut rembourser tout ou partie du credit par "
+    "anticipation. Une indemnite pourra etre exigee, egale a un semestre d'interets sur le capital "
+    "rembourse au taux moyen du credit, sans pouvoir depasser 3 % du capital restant du avant "
+    "remboursement. Aucune indemnite n'est due lorsque le remboursement est consecutif a la vente du "
+    "bien faisant suite a un changement du lieu d'activite professionnelle, au deces ou a la cessation "
+    "forcee d'activite de l'un des emprunteurs.",
+    "Article 4 - Defaillance. En cas de defaillance de l'emprunteur, le preteur pourra exiger le "
+    "remboursement immediat du capital restant du, majore des interets echus mais non payes. Les sommes "
+    "restant dues produisent des interets de retard a un taux majore de 3,00 points jusqu'a la date du "
+    "reglement effectif. Les incidents de paiement caracterises font l'objet d'une inscription au "
+    "fichier FICP tenu par la Banque de France.",
+    "Article 5 - Mediation et reclamation. Toute reclamation peut etre adressee au service relations "
+    "clientele du preteur. A defaut de reponse satisfaisante dans un delai de 60 jours, le mediateur de "
+    "l'etablissement peut etre saisi gratuitement. La liste des pieces necessaires a l'instruction du "
+    "dossier de mediation est disponible sur le site du mediateur.",
+]
+
+NOTICE_ASSURANCE_WALL = [
+    "La presente notice d'information definit les garanties du contrat d'assurance de groupe souscrit "
+    "par le preteur au profit de ses clients emprunteurs. Garanties : deces (quotite 100 %), perte "
+    "totale et irreversible d'autonomie (quotite 100 %), incapacite temporaire totale de travail "
+    "au-dela d'une franchise de 90 jours, invalidite permanente totale lorsque le taux d'invalidite "
+    "est superieur ou egal a 66 %, prise en charge partielle lorsque ce taux est compris entre 33 % "
+    "et 66 %. La periode d'indemnisation est limitee a 1 095 jours par sinistre.",
+    "Exclusions principales : faits volontaires de l'assure, sports aeriens pratiques a titre "
+    "professionnel, sejours de plus de 90 jours consecutifs hors Union europeenne, affections dorsales "
+    "et psychiques non objectivables sauf hospitalisation superieure a 10 jours. Les garanties cessent "
+    "au 31 decembre de l'annee du soixante-dixieme anniversaire de l'assure.",
+    "En application des lois Lagarde et Lemoine, l'emprunteur peut souscrire une assurance individuelle "
+    "presentant un niveau de garantie equivalent aupres de l'assureur de son choix, et resilier le "
+    "contrat en cours a tout moment sans frais ni penalite.",
+]
+
+
+def build_lcl_eparpille(doc):
+    """Les informations sont volontairement dispersées : une valeur par page,
+    en pleine phrase, jamais de tableau récapitulatif en tête de document."""
+    p = Page(doc, "LCL - Le Credit Lyonnais - Direction des Prets aux Particuliers",
+             "LCL SA au capital de 2 037 713 591 EUR - SIREN 954 509 741 RCS Lyon - "
+             "18 rue de la Republique 69002 Lyon", accent=(0.0, 0.2, 0.5))
+    p.logo("LCL", "bars")
+    p.band("OFFRE DE PRET IMMOBILIER N° LCL-2026-0663-118 - DOSSIER COMPLET")
+    p.para("La presente offre de pret immobilier est emise le 14/04/2026 et demeure valable jusqu'au "
+           "13/05/2026 inclus. Les caracteristiques financieres de votre credit sont detaillees dans "
+           "les differentes sections du present dossier, chacune traitant d'un aspect de l'operation ; "
+           "aucune synthese chiffree n'est fournie en tete de document.")
+    p.gap()
+    p.title("SOMMAIRE", 10)
+    for line in ["1. Presentation de l'operation", "2. Objet du financement",
+                 "3. Conditions generales applicables", "4. Assurance emprunteur",
+                 "5. Taux applicables au credit", "6. Frais et cout du credit", "7. Acceptation"]:
+        p.para(line, indent=62)
+    p.pagebreak()
+
+    # Page 2 : le MONTANT, en pleine phrase, entoure de montants leurres
+    p.band("1. PRESENTATION DE L'OPERATION - 2. OBJET DU FINANCEMENT")
+    p.para("L'operation financee est l'achat d'une residence principale situee a Lyon (69), quartier "
+           "de la Croix-Rousse, dependant de l'agence de Lyon Terreaux. Prix d'achat du bien tel que "
+           "stipule au compromis de vente : 265 000,00 EUR, auquel s'ajoutent les frais de notaire "
+           "estimes a 19 875,00 EUR. L'emprunteur declare disposer d'un apport personnel de "
+           "66 500,00 EUR verse directement entre les mains du notaire au jour de la signature.")
+    p.para("Apres imputation de l'apport, le montant du credit consenti par LCL s'eleve a "
+           "198 500,00 EUR, le solde du prix et des frais etant couvert par l'apport personnel. Le "
+           "deblocage interviendra en une seule fois entre les mains du notaire.")
+    p.pagebreak()
+
+    # Page 3 : mur de texte + la DUREE en pleine phrase
+    p.band("3. CONDITIONS GENERALES APPLICABLES")
+    for art in CGV_WALL:
+        p.para(art)
+        p.gap(4)
+    p.para("Le remboursement du credit s'effectue par echeances mensuelles constantes, sur une duree "
+           "de 276 mois a compter du premier deblocage des fonds, sous reserve des cas de differe "
+           "vises aux conditions generales.")
+    p.pagebreak()
+
+    # Page 4 : assurance (le TAEA au milieu de pourcentages leurres)
+    p.band("4. ASSURANCE EMPRUNTEUR")
+    for blk in NOTICE_ASSURANCE_WALL:
+        p.para(blk)
+        p.gap(4)
+    p.para("Capital assure : 198 500,00 EUR (quotite 100 % sur chaque tete). Cotisation mensuelle "
+           "d'assurance : 76,12 EUR, prelevee avec l'echeance du credit. Le Taux Annuel Effectif de "
+           "l'Assurance (TAEA) s'etablit a 0,46 %.")
+    p.pagebreak()
+
+    # Page 5 : les TAUX, en pleine phrase, avec taux de periode et usure en leurres
+    p.band("5. TAUX APPLICABLES AU CREDIT")
+    p.para("Le credit est consenti au taux debiteur fixe de 3,58 % l'an, soit un taux de periode "
+           "mensuel de 0,2983 %. Ce taux est ferme et definitif pour toute la duree du credit. Le "
+           "taux d'usure applicable a la categorie s'etablit a 6,04 % ; en toute hypothese, le taux "
+           "applique ne pourra exceder ce plafond reglementaire.")
+    p.para("Le taux annuel effectif global (TAEG) du credit, calcule conformement aux articles "
+           "R.314-1 et suivants du Code de la consommation et integrant les interets, les frais de "
+           "dossier, les frais de garantie et les primes d'assurance obligatoire, ressort a 4,02 %.")
+    p.pagebreak()
+
+    # Page 6 : les FRAIS et le COUT TOTAL, en pleine phrase
+    p.band("6. FRAIS ET COUT DU CREDIT")
+    p.para("Les frais de dossier s'elevent a 1 350,00 EUR, preleves sur le compte de l'emprunteur au "
+           "premier deblocage. Les frais de garantie (inscription d'hypotheque conventionnelle) sont "
+           "estimes a 2 940,00 EUR et regles directement aupres du notaire. Aucuns frais de courtage "
+           "ne sont dus au titre de la presente operation.")
+    p.para("Compte tenu de l'ensemble de ces elements, le cout total du credit (interets, frais et "
+           "assurance obligatoire compris) s'etablit a 132 419,16 EUR, et le montant total du par "
+           "l'emprunteur a 330 919,16 EUR.")
+    p.pagebreak()
+
+    # Page 7 : acceptation (l'unique rappel des valeurs, en pleine phrase)
+    p.band("7. ACCEPTATION")
+    p.para("Je soussigne(e), apres avoir pris connaissance de l'integralite du present dossier, "
+           "declare accepter l'offre de pret immobilier de LCL portant sur un montant du credit de "
+           "198 500,00 EUR au taux debiteur fixe de 3,58 %, TAEG de 4,02 %, TAEA de 0,46 %, pour un "
+           "cout total du credit de 132 419,16 EUR. Mention manuscrite « lu et approuve, bon pour "
+           "acceptation de l'offre ».")
+    p.para("Fait a Lyon, le 14/04/2026, en deux exemplaires originaux.")
+
+
+TRUTH_LCL = {"region": "Auvergne-Rhône-Alpes", "bank": "LCL", "credit_type": "immobilier",
+             "rate_type": "fixe", "amount": 198500.0, "duration_months": 276,
+             "rate_nominal": 3.58, "taeg": 4.02, "taea": 0.46, "fees": 1350.0,
+             "total_cost": 132419.16, "offer_date": date(2026, 4, 14)}
+
+
+def build_cic_annexe_fin(doc):
+    """12+ pages : FISE avec exemple représentatif, murs de conditions générales,
+    notice d'assurance pleine de leurres, tableau d'amortissement de 300 lignes…
+    et les VRAIES conditions particulières uniquement en ANNEXE, en toute fin."""
+    p = Page(doc, "CIC - Credit Industriel et Commercial - Pret immobilier",
+             "CIC SA au capital de 611 858 064 EUR - SIREN 542 016 381 RCS Paris - "
+             "6 avenue de Provence 75452 Paris Cedex 09", accent=(0.15, 0.45, 0.35))
+    p.logo("CIC", "square")
+    p.band("OFFRE DE PRET IMMOBILIER N° CIC-2026-8812-004")
+    p.para("Offre emise le 18/05/2026, valable jusqu'au 17/06/2026. Objet : acquisition d'une "
+           "residence principale situee a Strasbourg (67). IMPORTANT : les conditions particulieres "
+           "chiffrees de votre credit figurent en ANNEXE 1, en toute fin du present dossier, apres "
+           "les documents d'information reglementaires.")
+    p.gap()
+    p.title("SOMMAIRE", 10)
+    for line in ["1. Fiche d'information standardisee europeenne (FISE)",
+                 "2. Conditions generales du pret", "3. Notice d'assurance emprunteur",
+                 "4. Tableau d'amortissement previsionnel",
+                 "ANNEXE 1 - Conditions particulieres du credit (valeurs contractuelles)"]:
+        p.para(line, indent=62)
+    p.pagebreak()
+
+    p.band("1. FICHE D'INFORMATION STANDARDISEE EUROPEENNE")
+    p.para("Les valeurs ci-dessous constituent un exemple representatif au sens de la reglementation "
+           "et NE constituent PAS les conditions de votre credit, qui figurent en annexe 1.")
+    p.box(["Exemple representatif : pour un credit immobilier de 210 000,00 EUR sur 240 mois,",
+           "taux debiteur fixe de 3,95 %, TAEG de 4,85 %, mensualite de 1 268,00 EUR,",
+           "cout total du credit de 101 220,00 EUR, TAEA de 0,58 %, frais de dossier de 990,00 EUR."])
+    p.para("Le taux d'usure applicable s'etablit a 6,04 %. Indice de reference des prets a taux "
+           "revisable : Euribor 12 mois, valeur constatee 2,61 %. En cas d'impaye, les sommes dues "
+           "portent interet a un taux majore de 3,00 points.")
+    p.pagebreak()
+
+    p.band("2. CONDITIONS GENERALES DU PRET")
+    for art in CGV_WALL:
+        p.para(art)
+        p.gap(4)
+    p.para("Article 6 - Garanties. Le present credit est garanti par le cautionnement de la societe "
+           "Credit Logement. La commission de caution, reglee au deblocage, s'eleve a 3 260,00 EUR "
+           "dont une part est restituable au terme du credit en l'absence d'incident.")
+    p.para("Article 7 - Domiciliation. L'emprunteur s'engage a domicilier ses revenus sur un compte "
+           "ouvert dans les livres du preteur pendant une duree de dix ans. En cas de non-respect, le "
+           "taux debiteur pourra etre majore dans les conditions prevues aux conditions generales.")
+    p.pagebreak()
+
+    p.band("3. NOTICE D'ASSURANCE EMPRUNTEUR - CONTRAT GROUPE ACM")
+    for blk in NOTICE_ASSURANCE_WALL:
+        p.para(blk)
+        p.gap(4)
+    p.para("Bareme du contrat groupe : deces 0,24 %, perte totale et irreversible d'autonomie 0,11 %, "
+           "incapacite de travail 0,14 % du capital initial par an. Cotisation mensuelle totale : "
+           "94,30 EUR. Cout total de l'assurance sur la duree du pret : 26 040,00 EUR. Notice "
+           "etablie le 02/01/2026, referentiel ACM-2026-A.")
+    p.pagebreak()
+
+    p.band("4. TABLEAU D'AMORTISSEMENT PREVISIONNEL")
+    p.para("Tableau etabli hors assurance, sous reserve d'un deblocage unique des fonds au "
+           "01/08/2026. Montants exprimes en euros.")
+    rows, _m = amort_rows(276000.0, 3.49, 300, date(2026, 8, 1))
+    p.table(["N°", "Echeance", "Mensualite", "Interets", "Capital amorti", "Capital restant du"],
+            rows, [40, 85, 95, 95, 105, 115])
+    p.pagebreak()
+
+    p.band("ANNEXE 1 - CONDITIONS PARTICULIERES DU CREDIT")
+    p.para("Les valeurs ci-dessous constituent les conditions contractuelles de votre credit et "
+           "prevalent sur toute autre mention du dossier.")
+    p.kv("Montant du credit", "276 000,00 EUR")
+    p.kv("Duree", "300 mois")
+    p.kv("Taux debiteur fixe", "3,49 %")
+    p.kv("Taux Annuel Effectif Global (TAEG)", "3,94 %")
+    p.kv("Taux Annuel Effectif de l'Assurance (TAEA)", "0,42 %")
+    p.kv("Frais de dossier", "1 250,00 EUR")
+    p.kv("Cout total du credit", "139 887,60 EUR")
+    p.kv("Mensualite hors assurance", "1 380,22 EUR")
+    p.gap()
+    p.box(["Recapitulatif contractuel : montant du credit 276 000,00 EUR sur 300 mois,",
+           "taux debiteur fixe 3,49 % - TAEG 3,94 % - TAEA 0,42 %,",
+           "frais de dossier 1 250,00 EUR - cout total du credit 139 887,60 EUR."],
+          fill=(0.93, 0.97, 0.93))
+    p.para("Fait a Strasbourg, le 18/05/2026, en deux exemplaires originaux.")
+
+
+TRUTH_CIC = {"region": "Grand Est", "bank": "CIC", "credit_type": "immobilier",
+             "rate_type": "fixe", "amount": 276000.0, "duration_months": 300,
+             "rate_nominal": 3.49, "taeg": 3.94, "taea": 0.42, "fees": 1250.0,
+             "total_cost": 139887.60, "offer_date": date(2026, 5, 18)}
+
+
+def build_fortuneo_mur(doc):
+    """Aucun tableau, aucune ligne libellé/valeur : toutes les valeurs sont
+    noyées en pleine phrase dans des paragraphes denses."""
+    p = Page(doc, "FORTUNEO - Pret personnel en ligne - Espace credits",
+             "Fortuneo - SIREN 384 288 890 - Tour Ariane, 5 place de la Pyramide, "
+             "92088 Paris La Defense Cedex", accent=(0.85, 0.4, 0.0))
+    p.logo("fortuneo", "circle")
+    p.band("OFFRE DE CONTRAT DE CREDIT - PRET PERSONNEL")
+    p.para("La presente offre de pret personnel est emise le 02/03/2026 par Fortuneo et reste "
+           "valable quinze jours. L'emprunteur dispose d'un delai de retractation de quatorze jours "
+           "calendaires a compter de la signature du contrat. Le taux applicable en cas de retard "
+           "de paiement s'etablit a 9,88 %, et le taux d'usure de la categorie a 12,55 %. Dossier "
+           "n° FT-2026-3321-908, etudie et accepte sous reserve des pieces justificatives.")
+    p.pagebreak()
+
+    p.band("CONDITIONS DE VOTRE CREDIT")
+    p.para("Aux termes du present contrat, le montant du credit est fixe a 21 400,00 EUR, verse en "
+           "une seule fois sur le compte de l'emprunteur dans un delai de sept jours suivant "
+           "l'expiration du delai de retractation. Le credit est remboursable sur une duree de "
+           "72 mois par echeances mensuelles constantes de 348,58 EUR hors assurance, prelevees le "
+           "5 de chaque mois, la premiere echeance intervenant trente jours apres le versement des "
+           "fonds. Le credit est consenti au taux debiteur fixe de 5,35 % l'an, ce qui, compte tenu "
+           "de l'absence de frais annexes, conduit a un taux annuel effectif global (TAEG) de "
+           "5,92 %. Aucuns frais de dossier ne sont factures au titre de la presente offre, soit des "
+           "frais de dossier de 0,00 EUR. Le cout total du credit, correspondant a la difference "
+           "entre le montant total du et le montant du credit, s'etablit a 3 744,72 EUR pour un "
+           "montant total du de 25 144,72 EUR.")
+    p.pagebreak()
+
+    p.band("CONDITIONS GENERALES")
+    for art in CGV_WALL:
+        p.para(art)
+        p.gap(4)
+    p.pagebreak()
+
+    p.band("ASSURANCE FACULTATIVE")
+    for blk in NOTICE_ASSURANCE_WALL:
+        p.para(blk)
+        p.gap(4)
+    p.para("En cas d'adhesion, la cotisation mensuelle s'etablit a 15,16 EUR pour un assure de "
+           "moins de quarante-cinq ans, et le taux annuel effectif de l'assurance (TAEA) ressort a "
+           "0,85 %. L'adhesion a l'assurance n'est pas une condition d'octroi du credit.")
+    p.pagebreak()
+
+    p.band("RECAPITULATIF ET SIGNATURE")
+    p.para("Pour la parfaite information de l'emprunteur, il est rappele que le present pret "
+           "personnel porte sur un montant du credit de 21 400,00 EUR remboursable sur une duree de "
+           "72 mois au taux debiteur fixe de 5,35 %, que le TAEG s'etablit a 5,92 %, le TAEA de "
+           "l'assurance facultative a 0,85 %, les frais de dossier a 0,00 EUR et le cout total du "
+           "credit a 3 744,72 EUR. L'emprunteur reconnait avoir recu un exemplaire de l'offre et de "
+           "la notice d'assurance. Fait le 02/03/2026.")
+
+
+TRUTH_FOR = {"bank": "Fortuneo", "credit_type": "consommation", "rate_type": "fixe",
+             "amount": 21400.0, "duration_months": 72, "rate_nominal": 5.35, "taeg": 5.92,
+             "taea": 0.85, "fees": 0.0, "total_cost": 3744.72, "offer_date": date(2026, 3, 2)}
+
+
+def build_axa_assurance_melangee(doc):
+    """Dossier combiné crédit + assurance : la notice d'assurance domine le
+    document et regorge de montants et de pourcentages qui miment ceux du
+    crédit (coût total de l'assurance, capital assuré, barèmes, comparatif)."""
+    p = Page(doc, "AXA BANQUE - Pret immobilier et assurance emprunteur - Dossier combine",
+             "AXA Banque SA au capital de 89 467 136 EUR - SIREN 542 016 993 RCS Creteil - "
+             "203 rue Carnot 94120 Fontenay-sous-Bois", accent=(0.0, 0.1, 0.55))
+    p.logo("AXA Banque", "square")
+    p.band("OFFRE DE PRET IMMOBILIER + DOSSIER D'ASSURANCE EMPRUNTEUR")
+    p.para("Offre emise le 08/06/2026, valable trente jours, portant sur l'acquisition d'une "
+           "residence principale situee a Marseille (13). Le present dossier regroupe l'offre de "
+           "credit ET le dossier complet d'assurance emprunteur ; les elements relatifs a "
+           "l'assurance ne se substituent pas aux conditions du credit.")
+    p.pagebreak()
+
+    p.band("CONDITIONS DU CREDIT")
+    p.kv("Montant du credit", "231 000,00 EUR")
+    p.kv("Duree", "288 mois")
+    p.kv("Taux debiteur fixe", "3,62 %")
+    p.kv("Taux Annuel Effectif Global (TAEG)", "4,18 %")
+    p.kv("Frais de dossier", "1 100,00 EUR")
+    p.kv("Cout total du credit", "128 316,48 EUR")
+    p.kv("Mensualite hors assurance", "1 178,53 EUR")
+    p.para("Le taux annuel effectif de l'assurance figure dans le dossier d'assurance ci-apres, "
+           "partie integrante de la presente offre.")
+    p.pagebreak()
+
+    p.band("DOSSIER D'ASSURANCE EMPRUNTEUR - NOTICE D'INFORMATION")
+    for blk in NOTICE_ASSURANCE_WALL:
+        p.para(blk)
+        p.gap(4)
+    p.para("Le capital emprunte est assure a hauteur de 100 % sur chaque tete, soit une cotisation "
+           "mensuelle de 84,90 EUR par assure. Frais d'adhesion a l'association des assures : "
+           "25,00 EUR, preleves avec la premiere cotisation.")
+    p.para("Cout total de l'assurance sur la duree du pret : 21 158,00 EUR. Le Taux Annuel Effectif "
+           "de l'Assurance (TAEA) du contrat groupe retenu s'etablit a 0,44 %.")
+    p.pagebreak()
+
+    p.band("SIMULATION COMPARATIVE - DELEGATION D'ASSURANCE")
+    p.para("A titre de simulation et pour la parfaite information de l'emprunteur, le tableau "
+           "ci-dessous compare le contrat groupe a des contrats individuels du marche presentant un "
+           "niveau de garantie equivalent. Ces valeurs ne constituent pas une offre.")
+    p.table(["Assureur", "Formule", "Cotisation/mois (EUR)", "Taux assurance"],
+            [("Contrat groupe AXA", "Confort", "84,90", "0,44 %"),
+             ("Generali", "Emprunteur+", "61,20", "0,29 %"),
+             ("MetLife", "Essentiel", "68,45", "0,34 %"),
+             ("Suravenir", "Serenite", "97,10", "0,52 %"),
+             ("MNCAP", "Integrale", "112,30", "0,61 %")],
+            [130, 100, 120, 100], size=8.2)
+    p.para("L'ecart de cotisation constate sur la simulation peut representer jusqu'a 8 916,00 EUR "
+           "sur la duree du pret. La substitution reste possible a tout moment (loi Lemoine).")
+    p.pagebreak()
+
+    p.band("CONDITIONS GENERALES DU CREDIT")
+    for art in CGV_WALL:
+        p.para(art)
+        p.gap(4)
+    p.para("Montant total du par l'emprunteur au titre du credit : 359 316,48 EUR.")
+    p.pagebreak()
+
+    p.band("RECAPITULATIF ET ACCEPTATION")
+    p.box(["Votre credit : montant du credit 231 000,00 EUR sur 288 mois,",
+           "taux debiteur fixe 3,62 % - TAEG 4,18 % - TAEA 0,44 %,",
+           "frais de dossier 1 100,00 EUR - cout total du credit 128 316,48 EUR."],
+          fill=(0.93, 0.97, 0.93))
+    p.para("Fait a Marseille, le 08/06/2026, en deux exemplaires originaux.")
+
+
+TRUTH_AXA = {"region": "Provence-Alpes-Côte d'Azur", "bank": "AXA Banque",
+             "credit_type": "immobilier", "rate_type": "fixe", "amount": 231000.0,
+             "duration_months": 288, "rate_nominal": 3.62, "taeg": 4.18, "taea": 0.44,
+             "fees": 1100.0, "total_cost": 128316.48, "offer_date": date(2026, 6, 8)}
+
+
+def build_carrefour_fin(doc):
+    """Toutes les valeurs contractuelles sont regroupées SUR LA DERNIERE PAGE,
+    après une offre promotionnelle, des CGV et une notice d'assurance."""
+    p = Page(doc, "CARREFOUR BANQUE - Credit projet - Service clients particuliers",
+             "Carrefour Banque SA au capital de 101 346 956 EUR - SIREN 313 811 515 RCS Evry - "
+             "1 place Copernic 91051 Evry Cedex", accent=(0.0, 0.4, 0.75))
+    p.logo("Carrefour Banque", "circle")
+    p.band("OFFRE DE CONTRAT DE CREDIT - PRET PERSONNEL PROJET")
+    p.box(["OFFRE SPECIALE PORTEURS DE CARTE : taux debiteur promotionnel de 2,90 % pendant",
+           "les 6 premiers mois pour toute demande signee avant le 31/03/2026, puis taux",
+           "contractuel. Voir conditions de l'operation en magasin ou sur le site."],
+          fill=(0.92, 0.96, 1.0))
+    p.para("Offre emise le 23/02/2026. Dossier n° CB-2026-1104-552. Exemple representatif : un "
+           "credit de 10 000,00 EUR sur 48 mois au taux debiteur fixe de 5,90 % correspond a un "
+           "TAEG de 6,53 %, a 48 mensualites de 234,32 EUR et a un cout total du credit de "
+           "1 247,36 EUR. Cet exemple ne constitue pas votre offre, dont les conditions figurent "
+           "dans l'encadre recapitulatif en derniere page du present document.")
+    p.pagebreak()
+
+    p.band("CONDITIONS GENERALES DE VENTE ET D'UTILISATION")
+    for art in CGV_WALL:
+        p.para(art)
+        p.gap(4)
+    p.para("Le taux applicable en cas de retard de paiement s'etablit a 10,45 %. Le taux d'usure "
+           "de la categorie s'etablit a 12,55 % au titre du trimestre en cours.")
+    p.pagebreak()
+
+    p.band("ASSURANCE FACULTATIVE DES EMPRUNTEURS")
+    for blk in NOTICE_ASSURANCE_WALL:
+        p.para(blk)
+        p.gap(4)
+    p.para("Bareme : deces 0,32 %, incapacite 0,19 % du capital initial par an. Cotisation "
+           "mensuelle en cas d'adhesion : 4,12 EUR. Cout total de l'assurance sur la duree du "
+           "contrat : 247,20 EUR.")
+    p.pagebreak()
+
+    p.band("ENCADRE RECAPITULATIF - CONDITIONS DE VOTRE CREDIT")
+    p.kv("Montant du credit", "14 600,00 EUR")
+    p.kv("Duree du contrat", "60 mois")
+    p.kv("Taux debiteur fixe", "6,40 %")
+    p.kv("Taux Annuel Effectif Global (TAEG)", "7,12 %")
+    p.kv("Taux Annuel Effectif de l'Assurance (TAEA)", "1,05 %")
+    p.kv("Frais de dossier", "90,00 EUR")
+    p.kv("Mensualite hors assurance", "285,21 EUR")
+    p.kv("Cout total du credit", "2 612,40 EUR")
+    p.kv("Montant total du", "17 212,40 EUR")
+    p.gap()
+    p.para("Je reconnais avoir pris connaissance de l'offre de pret personnel portant sur un "
+           "montant du credit de 14 600,00 EUR sur une duree de 60 mois au taux debiteur fixe de "
+           "6,40 %, TAEG de 7,12 %, TAEA de 1,05 %, frais de dossier de 90,00 EUR, pour un cout "
+           "total du credit de 2 612,40 EUR. Fait le 23/02/2026.")
+
+
+TRUTH_CAR = {"bank": "Carrefour Banque", "credit_type": "consommation", "rate_type": "fixe",
+             "amount": 14600.0, "duration_months": 60, "rate_nominal": 6.40, "taeg": 7.12,
+             "taea": 1.05, "fees": 90.0, "total_cost": 2612.40, "offer_date": date(2026, 2, 23)}
+
+
 DOCS = [
     ("credit_agricole_immobilier.pdf", build_credit_agricole, TRUTH_CA, False),
     ("bnp_immobilier_variable.pdf", build_bnp_variable, TRUTH_BNP, False),
@@ -671,6 +1087,11 @@ DOCS = [
     ("cofidis_promo_piege.pdf", build_cofidis_promo, TRUTH_COF, False),
     ("banquepop_regroupement_DOSSIER.pdf", build_banquepop_regroupement_dossier, TRUTH_BP, False),
     ("creditmutuel_MULTIPRETS_ptz.pdf", build_creditmutuel_multiprets, TRUTH_CM, False),
+    ("lcl_immobilier_EPARPILLE.pdf", build_lcl_eparpille, TRUTH_LCL, False),
+    ("cic_immobilier_ANNEXE_FIN.pdf", build_cic_annexe_fin, TRUTH_CIC, False),
+    ("fortuneo_conso_MUR_DE_TEXTE.pdf", build_fortuneo_mur, TRUTH_FOR, False),
+    ("axa_immobilier_ASSURANCE_MELANGEE.pdf", build_axa_assurance_melangee, TRUTH_AXA, False),
+    ("carrefour_conso_TOUT_A_LA_FIN.pdf", build_carrefour_fin, TRUTH_CAR, False),
 ]
 
 

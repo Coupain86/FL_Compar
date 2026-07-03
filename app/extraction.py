@@ -181,14 +181,19 @@ _DUR_RE = re.compile(r"(\d{1,3})\s*(ans?\b|annees?\b|mois\b)")
 _DATE_RE = re.compile(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})\b")
 
 
+_WS_RE = re.compile(r"[\s\u00a0\u202f]")  # espaces, insécables ET retours à la ligne
+# (un « 265 000,00 EUR » en fin de ligne justifiée peut se couper en deux)
+
+
 def _to_float(s: str) -> float:
-    return float(s.replace(" ", "").replace(" ", "").replace(" ", "")
-                 .replace(".", "").replace(",", ".") if s.count(",") == 1 and s.count(".") >= 1
-                 else s.replace(" ", "").replace(" ", "").replace(" ", "").replace(",", "."))
+    s = _WS_RE.sub("", s)
+    return float(s.replace(".", "").replace(",", ".")
+                 if s.count(",") == 1 and s.count(".") >= 1
+                 else s.replace(",", "."))
 
 
 def _money(s: str) -> float:
-    s = s.replace(" ", "").replace(" ", "").replace(" ", "")
+    s = _WS_RE.sub("", s)
     # "200.000,00" ou "200000,00" ou "200.000" : la virgule est décimale, le point des milliers
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
@@ -205,8 +210,15 @@ _NEG_RE = re.compile(
     r"\b(exemple\w*|representati\w*|simulation\w*|promotionnel\w*|usure|"
     r"retard\w*|majore\w*|ancien\w*|actuel\w*|rachet\w*)\b")
 
+# Les montants du dossier d'assurance miment ceux du crédit : « coût total de
+# l'ASSURANCE » contient le libellé « coût total », « capital emprunté assuré »
+# contient « capital emprunté ». Entre le libellé et la valeur, ces mots
+# disqualifient — pour les champs en euros uniquement (le TAEA, lui, vit
+# légitimement au milieu du vocabulaire d'assurance).
+_EUR_NEG_RE = re.compile(r"\b(assuran\w*|assure\w*|cotisation\w*)\b")
 
-def _score(norm_text: str, start: int, labels) -> tuple[float, str]:
+
+def _score(norm_text: str, start: int, labels, extra_neg=None) -> tuple[float, str]:
     """Score d'un candidat = poids du mot-clé + bonus de proximité.
     Pénalité si un mot de contexte suspect apparaît ENTRE le libellé et la
     valeur (ou juste avant le libellé) : « taux debiteur PROMOTIONNEL de
@@ -226,6 +238,9 @@ def _score(norm_text: str, start: int, labels) -> tuple[float, str]:
         if _NEG_RE.search(zone):
             best *= 0.35
             src += " (contexte suspect)"
+        elif extra_neg and extra_neg.search(zone):
+            best *= 0.35
+            src += " (contexte assurance)"
     return best, src
 
 
@@ -351,7 +366,7 @@ def extract_fields(text: str) -> ExtractionResult:
     proposals = []
     for f_name, labels in _EUR_LABELS.items():
         for pos, val in eur_candidates:
-            score, src = _score(norm, pos, labels)
+            score, src = _score(norm, pos, labels, extra_neg=_EUR_NEG_RE)
             if score > 0.8:
                 proposals.append((score, f_name, pos, val, src))
     proposals = _repetition_bonus(proposals)
