@@ -123,12 +123,16 @@ def accueil(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/comparer")
-def choix_type(request: Request):
-    return _render(request, "type.html", types=CREDIT_LABELS)
+def comparer(request: Request, erreur: str = ""):
+    return _depot_page(request, erreur)
 
 
 @app.get("/comparer/depot")
 def depot(request: Request, type: str = "", erreur: str = ""):
+    return _depot_page(request, erreur)
+
+
+def _depot_page(request: Request, erreur: str = ""):
     messages = {
         "illisible": "On n'arrive pas à lire ce document. Reprenez une photo bien nette "
                      "et à plat, ou déposez le PDF d'origine.",
@@ -137,8 +141,7 @@ def depot(request: Request, type: str = "", erreur: str = ""):
         "fichier": "Choisissez un fichier avant de continuer.",
         "consentement": "Cochez la case de consentement pour continuer.",
     }
-    return _render(request, "depot.html", credit_type=type,
-                   erreur=messages.get(erreur, ""))
+    return _render(request, "depot.html", erreur=messages.get(erreur, ""))
 
 
 @app.post("/comparer/analyser")
@@ -146,17 +149,16 @@ async def analyser(request: Request, db: Session = Depends(get_db),
                    fichier: UploadFile = File(None),
                    credit_type: str = Form(""),
                    consentement: str = Form("")):
-    qs = f"?type={credit_type}&erreur=" if credit_type else "?erreur="
     if consentement != "on":
-        return RedirectResponse(f"/comparer/depot{qs}consentement", status_code=303)
+        return RedirectResponse("/comparer?erreur=consentement", status_code=303)
     if fichier is None or not fichier.filename:
-        return RedirectResponse(f"/comparer/depot{qs}fichier", status_code=303)
+        return RedirectResponse("/comparer?erreur=fichier", status_code=303)
     if not fichier.filename.lower().endswith(ALLOWED_EXT):
-        return RedirectResponse(f"/comparer/depot{qs}format", status_code=303)
+        return RedirectResponse("/comparer?erreur=format", status_code=303)
 
     data = await fichier.read()          # en mémoire uniquement — jamais sur disque
     if len(data) > MAX_UPLOAD:
-        return RedirectResponse(f"/comparer/depot{qs}taille", status_code=303)
+        return RedirectResponse("/comparer?erreur=taille", status_code=303)
 
     try:
         result = ex.extract(data, fichier.filename)
@@ -164,7 +166,7 @@ async def analyser(request: Request, db: Session = Depends(get_db),
         result = ex.ExtractionResult()
     del data                             # le document meurt ici
     if result.text_chars < 40:
-        return RedirectResponse(f"/comparer/depot{qs}illisible", status_code=303)
+        return RedirectResponse("/comparer?erreur=illisible", status_code=303)
 
     sid = _sid(request)
     offer = Offer(session_id=sid, status="draft",
@@ -178,6 +180,7 @@ async def analyser(request: Request, db: Session = Depends(get_db),
             setattr(offer, name, e.value)
             meta["fields"][name] = {"value": str(value), "confidence": e.confidence,
                                     "source": e.source}
+    meta["sub_loans"] = result.sub_loans
     region = result.fields.get("region")
     if region:
         offer.region = region.value
@@ -221,9 +224,11 @@ def verifier(offer_id: str, request: Request, db: Session = Depends(get_db)):
     offer = _own_offer(db, request, offer_id)
     if not offer:
         return RedirectResponse("/", status_code=303)
-    warnings = (offer.extraction_meta or {}).get("warnings", [])
+    meta = offer.extraction_meta or {}
     return _render(request, "verifier.html", offer=offer,
-                   rows=_field_view(offer), warnings=warnings)
+                   rows=_field_view(offer), warnings=meta.get("warnings", []),
+                   sub_loans=meta.get("sub_loans", []),
+                   type_label=CREDIT_LABELS.get(offer.credit_type))
 
 
 def _parse_value(kind: str, raw: str):
@@ -305,6 +310,7 @@ def resultat(offer_id: str, request: Request, db: Session = Depends(get_db)):
     notes = bm.qualitative_notes(offer)
     return _render(request, "resultat.html", offer=offer, bench=result, notes=notes,
                    type_label=CREDIT_LABELS.get(offer.credit_type, offer.credit_type or "—"),
+                   sub_loans=(offer.extraction_meta or {}).get("sub_loans", []),
                    min_cohort=bm.MIN_COHORT)
 
 
@@ -396,6 +402,7 @@ def admin_export(request: Request, db: Session = Depends(get_db), _user: str = D
             "ocr_utilise": meta.get("used_ocr", False),
             "avertissements": meta.get("warnings", []),
             "extraction_brute": meta.get("fields", {}),
+            "prets_detectes": meta.get("sub_loans", []),
             "corrections_utilisateur": [
                 {"champ": c.field, "lu": c.extracted_value, "corrige": c.corrected_value,
                  "confiance": c.confidence, "regle": c.source_rule} for c in corrections],

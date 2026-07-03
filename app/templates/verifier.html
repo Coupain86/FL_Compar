@@ -5,14 +5,29 @@
 
 {% for w in warnings %}<div class="alert warn">{{ w }}</div>{% endfor %}
 
+{% if sub_loans %}
+<div class="card" style="border-color:var(--accent);background:var(--ok-bg)">
+  <h3>🧩 Cette offre contient plusieurs prêts</h3>
+  <p></p>
+  {% for l in sub_loans %}
+  <p style="margin:4px 0">• <b>{{ l.label }}</b>{% if l.amount %} — {{ "{:,.0f}".format(l.amount).replace(",", " ") }} €{% endif %}{% if l.rate is defined %} · {{ "%.2f"|format(l.rate) }} %{% endif %}{% if l.duration_months %} · {{ l.duration_months }} mois{% endif %}</p>
+  {% endfor %}
+  <p class="microcopy">Les champs ci-dessous décrivent l'opération globale (le TAEG couvre l'ensemble des prêts).</p>
+</div>
+{% endif %}
+
 <form method="post" action="/comparer/verifier/{{ offer.id }}">
   <div class="field">
-    <label for="credit_type">Type de crédit</label>
+    <label for="credit_type">Type de crédit
+      {% if type_label %}<span class="badge" style="background:var(--accent)">reconnu : {{ type_label }}</span>
+      {% else %}<span class="badge">à confirmer</span>{% endif %}</label>
     <select name="credit_type" id="credit_type">
+      <option value="" disabled {% if not offer.credit_type %}selected{% endif %}>Choisir…</option>
       {% for value, label in [("immobilier","Immobilier"),("consommation","Consommation / Perso"),("auto","Auto"),("regroupement","Regroupement de crédits")] %}
       <option value="{{ value }}" {% if offer.credit_type == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
+    {% if type_label %}<p class="microcopy">Détecté depuis votre document — changez-le si c'est faux.</p>{% endif %}
   </div>
 
   <div class="grid2">

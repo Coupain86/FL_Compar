@@ -116,6 +116,7 @@ class Extracted:
 class ExtractionResult:
     fields: dict = field(default_factory=dict)   # nom -> Extracted
     warnings: list = field(default_factory=list)
+    sub_loans: list = field(default_factory=list)  # composantes d'une offre multi-prêts
     text_chars: int = 0
     used_ocr: bool = False
 
@@ -278,6 +279,47 @@ def _detect_region(norm: str):
                      "code postal / département en contexte de localisation")
 
 
+# Composantes possibles d'une offre immobilière multi-prêts. Chaque prêt a
+# son propre montant / taux / durée ; le TAEG global couvre l'ensemble.
+_SUB_LOAN_KWS = [
+    (r"\bpret a taux zero\b|\bptz\b", "Prêt à taux zéro (PTZ)"),
+    (r"\beco-?ptz\b", "Éco-PTZ"),
+    (r"\bpret conventionne\b", "Prêt conventionné"),
+    (r"\bpret d'accession sociale\b", "Prêt d'accession sociale"),
+    (r"\baction logement\b|\bpret patronal\b", "Prêt Action Logement"),
+    (r"\bpret relais\b", "Prêt relais"),
+    (r"\bpret principal\b", "Prêt principal"),
+]
+
+
+def _detect_sub_loans(norm: str) -> list:
+    """Repère les composantes d'une offre multi-prêts, chacune avec le
+    montant / taux / durée qui la suivent immédiatement."""
+    loans, seen = [], set()
+    for pattern, label in _SUB_LOAN_KWS:
+        for m in re.finditer(pattern, norm):
+            seg = norm[m.start():m.start() + 240]
+            loan = {"label": label}
+            a = _EUR_RE.search(seg)
+            if a:
+                loan["amount"] = _money(a.group(1))
+            r = _PCT_RE.search(seg)
+            if r:
+                loan["rate"] = _to_float(r.group(1))
+            d = _DUR_RE.search(seg)
+            if d:
+                loan["duration_months"] = int(d.group(1)) * (12 if d.group(2).startswith("an") else 1)
+            key = (label, loan.get("amount"))
+            if key not in seen:
+                seen.add(key)
+                loans.append(loan)
+            break  # une occurrence par libellé suffit (le récap dupliquerait)
+    # Une offre n'est "multi-prêts" que s'il y a au moins une composante
+    # aidée/complémentaire, ou plusieurs prêts nommés.
+    named = [l for l in loans if l["label"] != "Prêt principal"]
+    return loans if (named and len(loans) >= 2) else []
+
+
 def extract_fields(text: str) -> ExtractionResult:
     res = ExtractionResult(text_chars=len(text.strip()))
     if res.text_chars < 40:
@@ -370,6 +412,8 @@ def extract_fields(text: str) -> ExtractionResult:
     region = _detect_region(norm)
     if region:
         res.fields["region"] = region
+
+    res.sub_loans = _detect_sub_loans(norm)
 
     _validate(res)
     return res

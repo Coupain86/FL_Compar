@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if sub_loans %}
+<div class="card" style="border-color:var(--accent)">
+  <h3>🧩 Offre composée de plusieurs prêts</h3>
+  <p></p>
+  {% for l in sub_loans %}
+  <p style="margin:4px 0">• <b>{{ l.label }}</b>{% if l.amount %} — {{ "{:,.0f}".format(l.amount).replace(",", " ") }} €{% endif %}{% if l.rate is defined %} · {{ "%.2f"|format(l.rate) }} %{% endif %}{% if l.duration_months %} · {{ l.duration_months }} mois{% endif %}</p>
+  {% endfor %}
+  <p class="microcopy">Le positionnement ci-dessous est calculé sur le TAEG global, qui couvre l'ensemble de l'opération.</p>
+</div>
+{% endif %}
+
 {% if bench %}
 <h1>Votre positionnement</h1>
 <div class="verdict">

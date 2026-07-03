@@ -1,14 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Déposez votre offre</h1>
-<p class="sub">PDF ou photo. On lit tout pour vous — rien à recopier.</p>
+<p class="sub">PDF ou photo. On lit tout pour vous — rien à recopier.<br>Le type de crédit (immobilier, conso, auto…) est reconnu automatiquement.</p>
 
 {% if erreur %}<div class="alert err">{{ erreur }}</div>{% endif %}
 
 <form method="post" action="/comparer/analyser" enctype="multipart/form-data">
-  <input type="hidden" name="credit_type" value="{{ credit_type }}">
-
-  <div class="dropzone">
+    <div class="dropzone">
     <p>Choisissez votre fichier</p>
     <input type="file" name="fichier" accept=".pdf,.jpg,.jpeg,.png">
     <p class="microcopy">Formats acceptés : PDF, JPG, PNG — 10 Mo max.

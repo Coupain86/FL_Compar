@@ -612,6 +612,54 @@ TRUTH_BP = {"region": "Centre-Val de Loire", "bank": "Banque Populaire", "credit
             "taea": 0.72, "fees": 1490.0, "total_cost": 24862.12, "offer_date": date(2026, 4, 30)}
 
 
+
+
+def build_creditmutuel_multiprets(doc):
+    p = Page(doc, "CREDIT MUTUEL Nord Europe - Pret immobilier - Financement multi-prets",
+             "Caisse Federale du Credit Mutuel Nord Europe - SIREN 320 342 264 - "
+             "4 place Richebe 59000 Lille", accent=(0.05, 0.25, 0.55))
+    p.logo("Credit Mutuel", "square")
+    p.band("OFFRE DE PRET IMMOBILIER - OPERATION COMPOSEE DE PLUSIEURS PRETS")
+    p.para("Offre emise le 20/06/2026, valable 30 jours. Financement de l'acquisition d'une "
+           "residence principale situee a Lille (59). L'operation est financee par DEUX prets "
+           "distincts decrits ci-dessous ; le TAEG global couvre l'ensemble de l'operation.")
+    p.gap()
+    p.band("PLAN DE FINANCEMENT")
+    p.kv("Montant du credit (operation globale)", "260 000,00 EUR")
+    p.kv("TAEG global de l'operation", "3,71 %")
+    p.kv("TAEA (assurance, ensemble des prets)", "0,36 %")
+    p.kv("Frais de dossier", "980,00 EUR")
+    p.kv("Cout total du credit", "118 240,00 EUR")
+    p.gap()
+    p.title("PRET N° 1 - PRET PRINCIPAL", 10)
+    p.kv("Montant", "220 000,00 EUR")
+    p.kv("Duree", "300 mois")
+    p.kv("Taux debiteur fixe", "3,45 %")
+    p.kv("Mensualite hors assurance", "1 096,45 EUR")
+    p.gap()
+    p.title("PRET N° 2 - PRET A TAUX ZERO (PTZ)", 10)
+    p.kv("Montant", "40 000,00 EUR")
+    p.kv("Duree", "240 mois")
+    p.kv("Taux debiteur", "0,00 %")
+    p.kv("Mensualite", "166,67 EUR")
+    p.para("Le pret a taux zero est accorde sous conditions de ressources (article L.31-10-1 du "
+           "Code de la construction). Periode de differe possible selon la tranche de revenus.")
+    p.pagebreak()
+    p.band("RECAPITULATIF")
+    p.box(["Operation globale : montant du credit 260 000,00 EUR - TAEG global 3,71 %",
+           "Pret principal 220 000,00 EUR sur 300 mois au taux debiteur fixe de 3,45 %",
+           "Pret a taux zero 40 000,00 EUR sur 240 mois - TAEA 0,36 % - cout total du credit 118 240,00 EUR."],
+          fill=(0.93, 0.97, 0.93))
+    p.para(LEGAL_COMMON)
+    p.para("Fait a Lille, le 20/06/2026.")
+
+
+TRUTH_CM = {"region": "Hauts-de-France", "bank": "Crédit Mutuel", "credit_type": "immobilier",
+            "rate_type": "fixe", "amount": 260000.0, "duration_months": 300,
+            "rate_nominal": 3.45, "taeg": 3.71, "taea": 0.36, "fees": 980.0,
+            "total_cost": 118240.0, "offer_date": date(2026, 6, 20), "n_sub_loans": 2}
+
+
 DOCS = [
     ("credit_agricole_immobilier.pdf", build_credit_agricole, TRUTH_CA, False),
     ("bnp_immobilier_variable.pdf", build_bnp_variable, TRUTH_BNP, False),
@@ -622,6 +670,7 @@ DOCS = [
     ("socgen_immobilier_GROS_DOSSIER.pdf", build_socgen_gros_dossier, TRUTH_SG, False),
     ("cofidis_promo_piege.pdf", build_cofidis_promo, TRUTH_COF, False),
     ("banquepop_regroupement_DOSSIER.pdf", build_banquepop_regroupement_dossier, TRUTH_BP, False),
+    ("creditmutuel_MULTIPRETS_ptz.pdf", build_creditmutuel_multiprets, TRUTH_CM, False),
 ]
 
 
@@ -649,6 +698,14 @@ def main():
         ok = 0
         print(f"\n── {name}{'  [OCR]' if res.used_ocr else ''} ──")
         for field_name, expected in truth.items():
+            if field_name == "n_sub_loans":
+                got = len(res.sub_loans)
+                e = None
+                good = got == expected
+                ok += good
+                print(f"  [{'OK ' if good else 'RATE'}] {field_name:16s} attendu={expected!s:12s} "
+                      f"lu={got!s:12s} ({', '.join(l['label'] for l in res.sub_loans) or 'aucun'})")
+                continue
             e = res.fields.get(field_name)
             got = e.value if e else None
             good = got is not None and close(got, expected)
