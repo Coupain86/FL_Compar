@@ -65,6 +65,15 @@
 
 <h2 class="section">Que voulez-vous faire&nbsp;?</h2>
 
+<div class="card" style="border-color:var(--accent)">
+  <h3>📑 Générer mes 2 rapports de négociation — gratuits, sans engagement</h3>
+  <p><b>Le bon réflexe :</b> demandez une offre à un maximum de banques, puis négociez avec
+    nos rapports en main. Un <b>plan d'action</b> pour vous (économies chiffrées, arguments
+    prêts à l'emploi) et un <b>rapport à remettre à votre banque</b> (l'effort attendu,
+    poste par poste, face au marché).</p>
+  <a class="btn primary" href="/rapports/{{ offer.id }}">Générer mes rapports</a>
+</div>
+
 <div class="card">
   <h3>{% if bench %}📄 Recevoir mon rapport détaillé{% else %}🔔 Me prévenir dès qu'on peut me situer{% endif %}</h3>
   <form method="post" action="/resultat/{{ offer.id }}/action">

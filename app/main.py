@@ -21,16 +21,18 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
+from fastapi.responses import RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from . import advice as adv
 from . import benchmark as bm
 from . import extraction as ex
+from . import reports as rp
 from .db import Base, engine, get_db
 from .models import Consent, Correction, Offer
 
@@ -326,6 +328,62 @@ def action(offer_id: str, request: Request, db: Session = Depends(get_db),
                    kind=kind, contact=contact.strip()))
     db.commit()
     return RedirectResponse(f"/resultat/{offer.id}?ok={kind}", status_code=303)
+
+
+# ─────────────────────────────────────────────
+#  Rapports de négociation (personne + banque)
+# ─────────────────────────────────────────────
+def _session_offers(db: Session, request: Request):
+    sid = request.cookies.get("sid", "")
+    return (db.query(Offer).filter(Offer.session_id == sid, Offer.source == "upload",
+                                   Offer.status == "confirmed")
+            .order_by(Offer.created_at.desc()).all())
+
+
+@app.get("/rapports/{offer_id}")
+def rapports(offer_id: str, request: Request, db: Session = Depends(get_db)):
+    offer = _own_offer(db, request, offer_id)
+    if not offer:
+        return RedirectResponse("/", status_code=303)
+    others = [o for o in _session_offers(db, request) if o.id != offer.id]
+    return _render(request, "rapports.html", offer=offer, others=others,
+                   type_label=CREDIT_LABELS.get(offer.credit_type, offer.credit_type or "—"),
+                   type_labels=CREDIT_LABELS)
+
+
+@app.get("/rapports/{offer_id}/pdf")
+def rapports_pdf(offer_id: str, request: Request, db: Session = Depends(get_db),
+                 doc: str = "client", cible: str = "",
+                 avec: list[str] = Query(default=[])):
+    offer = _own_offer(db, request, offer_id)
+    if not offer or doc not in ("client", "banque"):
+        return RedirectResponse("/", status_code=303)
+
+    # Offres incluses dans l'analyse : uniquement celles de la même session.
+    included = [o for oid in avec if (o := _own_offer(db, request, oid))]
+
+    # Sujet du rapport banque : l'offre choisie via le sélecteur (sinon celle du parcours).
+    subject = offer
+    if doc == "banque" and cible:
+        subject = _own_offer(db, request, cible) or offer
+    competitors = [o for o in included if o.id != subject.id]
+
+    plan = adv.build_plan(db, subject, others=competitors)
+    label = CREDIT_LABELS.get(subject.credit_type, subject.credit_type or "crédit")
+    if doc == "client":
+        pdf = rp.client_report(subject, plan, label)
+        fname = "trustrate_plan_negociation.pdf"
+    else:
+        pdf = rp.bank_report(subject, plan, label)
+        # nom de fichier ASCII pur (les en-têtes HTTP n'aiment pas les accents)
+        import unicodedata
+        folded = unicodedata.normalize("NFKD", subject.bank or "banque")
+        folded = "".join(c for c in folded if not unicodedata.combining(c))
+        slug = "".join(c for c in folded.lower().replace(" ", "_")
+                       if c.isascii() and (c.isalnum() or c == "_")) or "banque"
+        fname = f"trustrate_rapport_{slug}.pdf"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 # ─────────────────────────────────────────────

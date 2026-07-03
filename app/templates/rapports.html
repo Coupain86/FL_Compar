@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Vos rapports de négociation</h1>
+<p class="sub">Deux documents gratuits, sans engagement, générés à partir de votre dossier
+  et des offres réellement déposées sur TrustRate.</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3>🧭 Votre plan de négociation</h3>
+    <p>Pour vous. La liste complète des actions à mener, classées par gain estimé,
+      avec l'économie en euros et la phrase exacte à dire à votre conseiller.</p>
+  </div>
+  <div class="card">
+    <h3>🏦 Le rapport à remettre à la banque</h3>
+    <p>Pour votre conseiller. Factuel et chiffré : la position de son offre face au
+      marché, poste par poste, et l'effort attendu pour emporter votre signature.</p>
+  </div>
+</div>
+
+<form method="get" action="/rapports/{{ offer.id }}/pdf">
+
+  {% if others %}
+  <h2 class="section">1. Les offres incluses dans l'analyse</h2>
+  <p class="microcopy">Plus vous incluez d'offres, plus vos rapports sont percutants :
+    une offre concurrente écrite est le meilleur argument de négociation qui existe.</p>
+
+  <div class="card">
+    <label class="consent" style="opacity:.75">
+      <input type="checkbox" checked disabled>
+      <span><b>{{ offer.bank or "Banque non identifiée" }}</b>
+        — {{ type_labels.get(offer.credit_type, offer.credit_type or "—") }}
+        {% if offer.amount %} · {{ "{:,.0f}".format(offer.amount).replace(",", " ") }} €{% endif %}
+        {% if offer.taeg %} · TAEG {{ "%.2f"|format(offer.taeg) }} %{% endif %}
+        <em>(offre du parcours en cours)</em></span>
+    </label>
+    {% for o in others %}
+    <label class="consent">
+      <input type="checkbox" name="avec" value="{{ o.id }}" checked>
+      <span><b>{{ o.bank or "Banque non identifiée" }}</b>
+        — {{ type_labels.get(o.credit_type, o.credit_type or "—") }}
+        {% if o.amount %} · {{ "{:,.0f}".format(o.amount).replace(",", " ") }} €{% endif %}
+        {% if o.taeg %} · TAEG {{ "%.2f"|format(o.taeg) }} %{% endif %}
+        {% if o.offer_date %} · offre du {{ o.offer_date.strftime("%d/%m/%Y") }}{% endif %}</span>
+    </label>
+    {% endfor %}
+  </div>
+
+  <h2 class="section">2. Pour quelle banque générer le rapport « banque » ?</h2>
+  <p class="microcopy">C'est à cette banque que vous remettrez le document —
+    généralement celle avec qui vous voulez signer… si elle fait un effort.</p>
+  <div class="card">
+    <label class="consent">
+      <input type="radio" name="cible" value="{{ offer.id }}" checked>
+      <span><b>{{ offer.bank or "Banque non identifiée" }}</b>
+        {% if offer.taeg %} · TAEG {{ "%.2f"|format(offer.taeg) }} %{% endif %}</span>
+    </label>
+    {% for o in others %}
+    <label class="consent">
+      <input type="radio" name="cible" value="{{ o.id }}">
+      <span><b>{{ o.bank or "Banque non identifiée" }}</b>
+        {% if o.taeg %} · TAEG {{ "%.2f"|format(o.taeg) }} %{% endif %}</span>
+    </label>
+    {% endfor %}
+  </div>
+
+  <h2 class="section">3. Générer</h2>
+  {% else %}
+  <p class="microcopy">💡 Vous n'avez qu'une offre pour l'instant. Déposez les offres des
+    autres banques au fur et à mesure : vos rapports deviendront beaucoup plus percutants
+    — rien ne négocie mieux qu'une offre concurrente écrite.</p>
+  {% endif %}
+
+  <div class="btnrow">
+    <button class="btn primary" type="submit" name="doc" value="client">
+      📥 Télécharger mon plan de négociation</button>
+    <button class="btn secondary" type="submit" name="doc" value="banque">
+      📥 Télécharger le rapport pour la banque</button>
+  </div>
+  <p class="microcopy">PDF gratuits, générés instantanément, avec le logo TrustRate.
+    Aucune coordonnée demandée.</p>
+</form>
+
+<div class="btnrow">
+  <a class="btn secondary" href="/resultat/{{ offer.id }}">← Retour au résultat</a>
+  <a class="btn secondary" href="/comparer">Déposer une autre offre</a>
+</div>
+{% endblock %}
