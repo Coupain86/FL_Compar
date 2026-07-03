@@ -198,25 +198,33 @@ def _money(s: str) -> float:
 
 # Contextes qui disqualifient (presque) une valeur : exemples réglementaires,
 # taux d'appel marketing, taux de sanction… Ce sont les grands pièges du réel.
-_NEGATIVE_CONTEXT = ("exemple", "representatif", "simulation", "promotionnel",
-                     "usure", "retard", "majore", "ancien", "actuel", "rachete")
+# Frontières de mots obligatoires : « actuel » ne doit pas matcher dans
+# « préconTRACTUELLES » ni « contrACTUEL » (qui étiquette le VRAI taux).
+_NEG_RE = re.compile(
+    r"\b(exemple\w*|representati\w*|simulation\w*|promotionnel\w*|usure|"
+    r"retard\w*|majore\w*|ancien\w*|actuel\w*|rachet\w*)\b")
 
 
 def _score(norm_text: str, start: int, labels) -> tuple[float, str]:
-    """Score d'un candidat = poids du mot-clé + bonus de proximité,
-    fortement pénalisé si le contexte est celui d'un exemple/leurre."""
+    """Score d'un candidat = poids du mot-clé + bonus de proximité.
+    Pénalité si un mot de contexte suspect apparaît ENTRE le libellé et la
+    valeur (ou juste avant le libellé) : « taux debiteur PROMOTIONNEL de
+    1,00 % » est pénalisé, mais un « retard » mentionné à la ligne
+    précédente ne disqualifie pas un champ correctement étiqueté."""
     window = norm_text[max(0, start - _WINDOW):start]
-    best, src = 0.0, ""
+    best, src, best_idx = 0.0, "", -1
     for kw, weight in labels:
         idx = window.rfind(kw)
         if idx >= 0:
             proximity = 1.0 - (len(window) - (idx + len(kw))) / _WINDOW  # 0..1
             s = weight + max(0.0, proximity)
             if s > best:
-                best, src = s, kw
-    if best and any(neg in window for neg in _NEGATIVE_CONTEXT):
-        best *= 0.35
-        src += " (contexte suspect)"
+                best, src, best_idx = s, kw, idx
+    if best:
+        zone = window[max(0, best_idx - 12):]
+        if _NEG_RE.search(zone):
+            best *= 0.35
+            src += " (contexte suspect)"
     return best, src
 
 
