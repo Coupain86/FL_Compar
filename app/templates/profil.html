@@ -34,6 +34,7 @@
       <option value="{{ r }}" {% if offer.region == r %}selected{% endif %}>{{ r }}</option>
       {% endfor %}
     </select>
+    {% if offer.region %}<p class="microcopy">Détectée depuis votre document — modifiez-la si besoin.</p>{% endif %}
   </div>
 
   <button class="btn primary" type="submit">Voir mon positionnement</button>

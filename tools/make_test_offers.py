@@ -214,6 +214,7 @@ def build_credit_agricole(doc):
     p.gap()
     p.title("I. CARACTERISTIQUES DU CREDIT", 10)
     p.kv("Nature du pret", "Pret immobilier amortissable - acquisition residence principale")
+    p.kv("Bien finance", "Maison individuelle situee a Poitiers (86)")
     p.kv("Montant du credit", "245 000,00 EUR")
     p.kv("Duree totale", "300 mois (25 ans)")
     p.kv("Taux debiteur fixe", "3,45 % l'an")
@@ -240,7 +241,7 @@ def build_credit_agricole(doc):
     p.para("Fait a Poitiers, le 12/06/2026, en deux exemplaires.")
 
 
-TRUTH_CA = {"bank": "Crédit Agricole", "credit_type": "immobilier", "rate_type": "fixe",
+TRUTH_CA = {"region": "Nouvelle-Aquitaine", "bank": "Crédit Agricole", "credit_type": "immobilier", "rate_type": "fixe",
             "amount": 245000.0, "duration_months": 300, "rate_nominal": 3.45, "taeg": 3.98,
             "taea": 0.52, "fees": 1200.0, "total_cost": 148736.52, "offer_date": date(2026, 6, 12)}
 
@@ -348,7 +349,7 @@ def build_bourso_auto(doc):
              "44 rue Traversiere 92100 Boulogne-Billancourt")
     p.title("OFFRE DE CREDIT AUTO - VEHICULE D'OCCASION")
     p.para("Offre emise le 28/06/2026 pour le financement automobile d'un vehicule d'occasion de moins "
-           "de 36 mois (Peugeot 308, immatriculee en 2024, prix d'achat 26 900,00 EUR, apport personnel "
+           "de 36 mois (Peugeot 308, immatriculee a Toulouse (31) en 2024, prix d'achat 26 900,00 EUR, apport personnel "
            "2 600,00 EUR). Offre valable jusqu'au 12/07/2026. Premiere echeance 30 jours apres "
            "deblocage des fonds.")
     p.gap()
@@ -368,7 +369,7 @@ def build_bourso_auto(doc):
     p.para(LEGAL_COMMON)
 
 
-TRUTH_BB = {"bank": "Boursobank", "credit_type": "auto", "rate_type": "fixe",
+TRUTH_BB = {"region": "Occitanie", "bank": "Boursobank", "credit_type": "auto", "rate_type": "fixe",
             "amount": 24300.0, "duration_months": 60, "rate_nominal": 4.85, "taeg": 5.32,
             "taea": 0.60, "fees": 150.0, "total_cost": 3391.0, "offer_date": date(2026, 6, 28)}
 
@@ -394,7 +395,7 @@ def build_lbp_scan(doc):
            "Fait le 17/03/2026.")
 
 
-TRUTH_LBP = {"bank": "La Banque Postale", "credit_type": "immobilier", "rate_type": "fixe",
+TRUTH_LBP = {"region": "Bretagne", "bank": "La Banque Postale", "credit_type": "immobilier", "rate_type": "fixe",
              "amount": 185000.0, "duration_months": 240, "rate_nominal": 3.55, "taeg": 4.05,
              "taea": 0.48, "fees": 800.0, "total_cost": 84620.0, "offer_date": date(2026, 3, 17)}
 
@@ -487,7 +488,7 @@ def build_socgen_gros_dossier(doc):
            "manuscrite « lu et approuve, bon pour acceptation de l'offre ».")
 
 
-TRUTH_SG = {"bank": "Société Générale", "credit_type": "immobilier", "rate_type": "fixe",
+TRUTH_SG = {"region": "Pays de la Loire", "bank": "Société Générale", "credit_type": "immobilier", "rate_type": "fixe",
             "amount": 289000.0, "duration_months": 264, "rate_nominal": 3.42, "taeg": 3.87,
             "taea": 0.38, "fees": 1150.0, "total_cost": 121743.44, "offer_date": date(2026, 5, 5)}
 
@@ -606,7 +607,7 @@ def build_banquepop_regroupement_dossier(doc):
     p.para("Fait a Tours, le 30/04/2026, en deux exemplaires originaux.")
 
 
-TRUTH_BP = {"bank": "Banque Populaire", "credit_type": "regroupement", "rate_type": "fixe",
+TRUTH_BP = {"region": "Centre-Val de Loire", "bank": "Banque Populaire", "credit_type": "regroupement", "rate_type": "fixe",
             "amount": 74900.0, "duration_months": 144, "rate_nominal": 4.95, "taeg": 5.74,
             "taea": 0.72, "fees": 1490.0, "total_cost": 24862.12, "offer_date": date(2026, 4, 30)}
 

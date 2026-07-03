@@ -178,6 +178,11 @@ async def analyser(request: Request, db: Session = Depends(get_db),
             setattr(offer, name, e.value)
             meta["fields"][name] = {"value": str(value), "confidence": e.confidence,
                                     "source": e.source}
+    region = result.fields.get("region")
+    if region:
+        offer.region = region.value
+        meta["fields"]["region"] = {"value": region.value, "confidence": region.confidence,
+                                    "source": region.source}
     offer.extraction_meta = meta
     db.add(offer)
     db.commit()

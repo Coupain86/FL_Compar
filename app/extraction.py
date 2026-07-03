@@ -66,6 +66,25 @@ REGIONS = [
     "Corse", "Outre-mer",
 ]
 
+# Départements -> région (pour détecter la région du bien/de l'emprunteur)
+_REGION_DEPTS = {
+    "Île-de-France": ["75", "77", "78", "91", "92", "93", "94", "95"],
+    "Auvergne-Rhône-Alpes": ["01", "03", "07", "15", "26", "38", "42", "43", "63", "69", "73", "74"],
+    "Nouvelle-Aquitaine": ["16", "17", "19", "23", "24", "33", "40", "47", "64", "79", "86", "87"],
+    "Occitanie": ["09", "11", "12", "30", "31", "32", "34", "46", "48", "65", "66", "81", "82"],
+    "Hauts-de-France": ["02", "59", "60", "62", "80"],
+    "Grand Est": ["08", "10", "51", "52", "54", "55", "57", "67", "68", "88"],
+    "Provence-Alpes-Côte d'Azur": ["04", "05", "06", "13", "83", "84"],
+    "Pays de la Loire": ["44", "49", "53", "72", "85"],
+    "Bretagne": ["22", "29", "35", "56"],
+    "Normandie": ["14", "27", "50", "61", "76"],
+    "Bourgogne-Franche-Comté": ["21", "25", "39", "58", "70", "71", "89", "90"],
+    "Centre-Val de Loire": ["18", "28", "36", "37", "41", "45"],
+    "Corse": ["20"],
+    "Outre-mer": ["971", "972", "973", "974", "975", "976"],
+}
+DEPT_TO_REGION = {d: r for r, ds in _REGION_DEPTS.items() for d in ds}
+
 INCOME_BRACKETS = ["moins de 2 000 €", "2 000 – 3 500 €", "3 500 – 5 000 €", "plus de 5 000 €"]
 DEPOSIT_BRACKETS = ["0 %", "5 – 10 %", "10 – 20 %", "plus de 20 %"]
 
@@ -218,6 +237,39 @@ def _repetition_bonus(proposals):
             for score, f_name, pos, val, src in proposals]
 
 
+_POSTAL_RE = re.compile(r"\b(\d{5})\b")
+_DEPT_PAREN_RE = re.compile(r"\((\d{2,3})\)")
+# Contextes de localisation du bien / de l'emprunteur. Les adresses de siège
+# (RCS, capital social) n'en font jamais partie : elles ne votent pas.
+_REGION_CONTEXT = ("situe", "situee", "residence", "acquisition", "demeurant",
+                   "immatricule", "bien ", "agence de", "logement")
+
+
+def _detect_region(norm: str):
+    votes = {}
+
+    def vote(dept, pos):
+        region = DEPT_TO_REGION.get(dept)
+        if not region:
+            return
+        window = norm[max(0, pos - 80):pos]
+        if any(k in window for k in _REGION_CONTEXT):
+            votes[region] = votes.get(region, 0) + 1
+
+    for m in _POSTAL_RE.finditer(norm):
+        cp = m.group(1)
+        dept = cp[:3] if cp.startswith("97") else cp[:2]
+        vote(dept, m.start())
+    for m in _DEPT_PAREN_RE.finditer(norm):
+        vote(m.group(1).zfill(2), m.start())
+
+    if not votes:
+        return None
+    best = max(votes, key=votes.get)
+    return Extracted(best, 0.75 if votes[best] >= 2 else 0.6,
+                     "code postal / département en contexte de localisation")
+
+
 def extract_fields(text: str) -> ExtractionResult:
     res = ExtractionResult(text_chars=len(text.strip()))
     if res.text_chars < 40:
@@ -306,6 +358,10 @@ def extract_fields(text: str) -> ExtractionResult:
         res.fields["rate_type"] = Extracted("fixe", 0.8, "mention « taux fixe »")
     elif "variable" in norm or "revisable" in norm:
         res.fields["rate_type"] = Extracted("variable", 0.8, "mention « variable »")
+
+    region = _detect_region(norm)
+    if region:
+        res.fields["region"] = region
 
     _validate(res)
     return res
