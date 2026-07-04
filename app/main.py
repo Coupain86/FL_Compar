@@ -72,12 +72,25 @@ FLASH = {
 }
 
 
+def _migrate():
+    """Micro-migration : create_all ne modifie jamais une table existante.
+    Les colonnes ajoutées après coup sont créées ici (no-op si déjà là)."""
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE offers ADD COLUMN has_other_credits VARCHAR(8)"))
+        except Exception:
+            pass  # colonne déjà présente
+
+
 Base.metadata.create_all(bind=engine)
+_migrate()
 
 
 @app.on_event("startup")
 def _startup():
     Base.metadata.create_all(bind=engine)
+    _migrate()
     if os.environ.get("SEED_ON_START", "0") == "1":
         from . import seed
         seed.run()
@@ -286,17 +299,23 @@ def profil(offer_id: str, request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/", status_code=303)
     return _render(request, "profil.html", offer=offer,
                    incomes=ex.INCOME_BRACKETS, deposits=ex.DEPOSIT_BRACKETS,
-                   regions=ex.REGIONS, is_immo=(offer.credit_type == "immobilier"))
+                   regions=ex.REGIONS, is_immo=(offer.credit_type == "immobilier"),
+                   # un dossier de regroupement liste déjà les crédits rachetés :
+                   # la question « d'autres crédits ? » y serait absurde
+                   ask_credits=(offer.credit_type != "regroupement"))
 
 
 @app.post("/comparer/profil/{offer_id}")
 def profil_post(offer_id: str, request: Request, db: Session = Depends(get_db),
-                income: str = Form(""), deposit: str = Form(""), region: str = Form("")):
+                income: str = Form(""), deposit: str = Form(""), region: str = Form(""),
+                other_credits: str = Form("")):
     offer = _own_offer(db, request, offer_id)
     if not offer:
         return RedirectResponse("/", status_code=303)
     offer.income_bracket = income or None
     offer.deposit_bracket = deposit or None
+    if other_credits in ("oui", "non"):
+        offer.has_other_credits = other_credits
     offer.region = region or None
     offer.status = "confirmed"
     db.commit()

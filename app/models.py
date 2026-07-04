@@ -45,6 +45,10 @@ class Offer(Base):
     # Profil en tranches (jamais de valeurs exactes)
     income_bracket = Column(String(24))
     deposit_bracket = Column(String(24))
+    # « oui » / « non » / NULL (non répondu). Sert UNIQUEMENT à adapter les
+    # conseils de négociation — jamais de critère de cohorte (ça diviserait
+    # les cohortes par deux et aggraverait le démarrage à froid).
+    has_other_credits = Column(String(8))
 
     # Traçabilité de l'extraction (confiances par champ, avertissements)
     extraction_meta = Column(JSON, default=dict)

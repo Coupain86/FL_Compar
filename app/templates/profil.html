@@ -26,6 +26,19 @@
   </div>
   {% endif %}
 
+  {% if ask_credits %}
+  <div class="field">
+    <span class="lbl">D'autres crédits en cours&nbsp;?</span>
+    <div class="chips">
+      <label><input type="radio" name="other_credits" value="non"
+        {% if offer.has_other_credits == "non" %}checked{% endif %}>Aucun</label>
+      <label><input type="radio" name="other_credits" value="oui"
+        {% if offer.has_other_credits == "oui" %}checked{% endif %}>Oui</label>
+    </div>
+    <p class="microcopy">Sert uniquement à adapter vos conseils de négociation.</p>
+  </div>
+  {% endif %}
+
   <div class="field">
     <label for="region">Région</label>
     <select name="region" id="region" required>

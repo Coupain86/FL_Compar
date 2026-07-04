@@ -342,6 +342,37 @@ def build_plan(db: Session, offer: Offer, others: list[Offer] | None = None) -> 
                      "serré ou une option de passage à taux fixe sans frais.",
             bank_target="cap ±1 pt / option fixe"))
 
+    # Crédit(s) déjà en cours (question du profil — jamais posée en regroupement)
+    if offer.credit_type != "regroupement":
+        if offer.has_other_credits == "oui":
+            L(Lever(
+                code="credits_en_cours", category=CAT_RATE,
+                title="Vos crédits en cours pèsent sur votre taux : trois façons d'en jouer",
+                detail="À revenus égaux, un crédit en cours augmente votre taux d'endettement "
+                       "et réduit votre reste à vivre : la banque le tarife. Trois options, de "
+                       "la plus efficace à la plus simple : 1) SOLDER un petit crédit avant la "
+                       "demande — gagner 0,1 à 0,2 point sur le prêt principal rembourse très "
+                       "vite un solde de quelques milliers d'euros. 2) Demander à la banque de "
+                       "CHIFFRER le rachat de vos crédits dans l'opération, et comparer. "
+                       "3) Si vous les gardez : transformez-les en argument — un historique de "
+                       "remboursement sans un seul incident est une PREUVE de fiabilité, "
+                       "dites-le explicitement.",
+                say="« Si je solde mon crédit en cours avant la signature, quel taux "
+                    "m'accordez-vous ? Et à combien chiffrez-vous son rachat dans "
+                    "l'opération ? »",
+                ease="à étudier", basis="crédit(s) en cours déclaré(s) dans votre profil"))
+        elif offer.has_other_credits == "non":
+            L(Lever(
+                code="dossier_propre", category=CAT_COUNTER,
+                title="Aucun crédit en cours : votre dossier est plus propre que la moyenne",
+                detail="Pas d'endettement parallèle = taux d'endettement bas, reste à vivre "
+                       "intact, risque minimal pour la banque. C'est un argument, pas un "
+                       "détail : beaucoup de dossiers concurrents portent déjà un crédit auto "
+                       "ou conso. Exigez que cette qualité de dossier se voie dans le taux.",
+                say="« Zéro crédit en cours, zéro incident : mon dossier est dans le haut du "
+                    "panier — je veux un taux qui le reflète. »",
+                ease="réaliste", basis="profil déclaré sans crédit en cours"))
+
     if offer.credit_type == "immobilier":
         sub_loans = (offer.extraction_meta or {}).get("sub_loans", [])
         if not sub_loans:
