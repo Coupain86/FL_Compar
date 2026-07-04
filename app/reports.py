@@ -163,6 +163,19 @@ class Doc:
         self.y += 32
 
     def box(self, lines, fill=LIGHT_BG, border=ACCENT, size=8.8, pad=10, title=""):
+        # replie les lignes trop longues pour ne jamais déborder du cadre
+        limit = int((545 - 60 - 8) / (size * 0.5))
+        wrapped = []
+        for ln in lines:
+            words, cur = str(ln).split(), ""
+            for w in words:
+                if len(cur) + len(w) + 1 > limit:
+                    wrapped.append(cur)
+                    cur = "    " + w  # retrait de continuation
+                else:
+                    cur = cur + " " + w if cur else w
+            wrapped.append(cur)
+        lines = wrapped or [""]
         h = (14 if title else 0) + size * 1.5 * len(lines) + 2 * pad - 6
         self.need(h + 8)
         top = self.y - pad + 2
@@ -410,12 +423,18 @@ def bank_report(offer: Offer, plan: AdvicePlan, type_label: str) -> bytes:
     if rivals:
         best = rivals[0]
         d.band("ÉLÉMENT DÉTERMINANT — OFFRES CONCURRENTES EN MAIN", color=WARN)
-        d.para(f"Votre client dispose de {len(rivals)} offre(s) concurrente(s) ÉCRITE(S). "
-               f"La plus compétitive affiche un TAEG de {_fmt_pct(best['taeg'])}"
-               + (f" (taux nominal {_fmt_pct(best['rate_nominal'])})"
-                  if best["rate_nominal"] is not None else "")
-               + ". Ces offres sont réelles et signables en l'état : l'alignement de vos "
-               "conditions est la voie la plus directe vers la signature.", size=9.2)
+        if offer.taeg is not None and best["taeg"] >= offer.taeg:
+            d.para(f"Votre client dispose de {len(rivals)} autre(s) offre(s) ÉCRITE(S) et "
+                   "compare activement. Votre offre est aujourd'hui la mieux placée sur le "
+                   f"TAEG (meilleure alternative : {_fmt_pct(best['taeg'])}) : les ajustements "
+                   "ci-dessous verrouilleraient définitivement la signature.", size=9.2)
+        else:
+            d.para(f"Votre client dispose de {len(rivals)} offre(s) concurrente(s) ÉCRITE(S). "
+                   f"La plus compétitive affiche un TAEG de {_fmt_pct(best['taeg'])}"
+                   + (f" (taux nominal {_fmt_pct(best['rate_nominal'])})"
+                      if best["rate_nominal"] is not None else "")
+                   + ". Ces offres sont réelles et signables en l'état : l'alignement de vos "
+                   "conditions est la voie la plus directe vers la signature.", size=9.2)
         d.gap(4)
 
     # Les efforts demandés

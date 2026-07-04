@@ -21,6 +21,7 @@
   <div class="btnrow">
     {% if item.offer.status == "confirmed" %}
     <a class="btn secondary" href="/resultat/{{ item.offer.id }}">Revoir</a>
+    <a class="btn secondary" href="/rapports/{{ item.offer.id }}">📑 Rapports</a>
     {% else %}
     <a class="btn secondary" href="/comparer/verifier/{{ item.offer.id }}">Reprendre</a>
     {% endif %}

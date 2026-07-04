@@ -419,7 +419,7 @@ def extract_fields(text: str) -> ExtractionResult:
         if any(_normalize(k) in norm for k in kws):
             res.fields["credit_type"] = Extracted(ctype, 0.85, "vocabulaire du document")
             break
-    if "taux fixe" in norm or "fixe" in norm.split():
+    if "taux fixe" in norm or "taux constant" in norm or "fixe" in norm.split():
         res.fields["rate_type"] = Extracted("fixe", 0.8, "mention « taux fixe »")
     elif "variable" in norm or "revisable" in norm:
         res.fields["rate_type"] = Extracted("variable", 0.8, "mention « variable »")

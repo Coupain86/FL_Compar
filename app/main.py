@@ -345,7 +345,10 @@ def rapports(offer_id: str, request: Request, db: Session = Depends(get_db)):
     offer = _own_offer(db, request, offer_id)
     if not offer:
         return RedirectResponse("/", status_code=303)
-    others = [o for o in _session_offers(db, request) if o.id != offer.id]
+    # On ne propose que les offres du MÊME type de crédit : comparer le TAEG
+    # d'un prêt immobilier à celui d'un crédit conso n'aurait aucun sens.
+    others = [o for o in _session_offers(db, request)
+              if o.id != offer.id and o.credit_type == offer.credit_type]
     return _render(request, "rapports.html", offer=offer, others=others,
                    type_label=CREDIT_LABELS.get(offer.credit_type, offer.credit_type or "—"),
                    type_labels=CREDIT_LABELS)
@@ -359,14 +362,22 @@ def rapports_pdf(offer_id: str, request: Request, db: Session = Depends(get_db),
     if not offer or doc not in ("client", "banque"):
         return RedirectResponse("/", status_code=303)
 
-    # Offres incluses dans l'analyse : uniquement celles de la même session.
-    included = [o for oid in avec if (o := _own_offer(db, request, oid))]
+    # Offres incluses dans l'analyse : l'offre du parcours TOUJOURS (la case
+    # grisée de l'écran de sélection n'est pas soumise par le navigateur),
+    # plus celles cochées — uniquement si même session et même type de crédit.
+    included = {offer.id: offer}
+    for oid in avec:
+        o = _own_offer(db, request, oid)
+        if o and o.credit_type == offer.credit_type:
+            included[o.id] = o
 
     # Sujet du rapport banque : l'offre choisie via le sélecteur (sinon celle du parcours).
     subject = offer
     if doc == "banque" and cible:
-        subject = _own_offer(db, request, cible) or offer
-    competitors = [o for o in included if o.id != subject.id]
+        picked = _own_offer(db, request, cible)
+        if picked and picked.credit_type == offer.credit_type:
+            subject = picked
+    competitors = [o for o in included.values() if o.id != subject.id]
 
     plan = adv.build_plan(db, subject, others=competitors)
     label = CREDIT_LABELS.get(subject.credit_type, subject.credit_type or "crédit")
