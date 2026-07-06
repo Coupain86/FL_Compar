@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Confidentialité et données — TrustRate{% endblock %}
+{% block content %}
+<h1>Confidentialité &amp; données</h1>
+<p class="sub">La version courte : votre document n'est jamais conservé, on ne stocke que
+  des chiffres comparables, et vous pouvez tout effacer en un clic.</p>
+
+<div class="card">
+  <h3>📄 Votre document (offre de prêt, photo, PDF)</h3>
+  <p>Il est analysé <b>en mémoire uniquement</b>, le temps d'en extraire les champs
+     comparables, puis détruit. Il n'est <b>jamais écrit sur disque, jamais conservé,
+     jamais transmis</b> — ni à des tiers, ni à une intelligence artificielle externe :
+     l'analyse est réalisée par notre propre algorithme, sur nos serveurs.</p>
+</div>
+
+<div class="card">
+  <h3>🔢 Ce que nous conservons</h3>
+  <p>Uniquement les caractéristiques comparables de l'offre : type de crédit, banque
+     émettrice, montant, durée, taux, TAEG, assurance (TAEA), frais, coût total, date de
+     l'offre, région, et votre profil <b>en tranches</b> (tranche de revenus, tranche
+     d'apport, présence d'autres crédits — jamais de valeurs exactes).
+     <b>Aucun nom, aucune adresse, aucun élément d'identité</b> n'est extrait ni stocké.</p>
+  <p style="margin-top:8px">Ces données servent à vous positionner et à enrichir, de façon
+     anonyme, les comparaisons de la communauté. Base légale : votre consentement, recueilli
+     au moment du dépôt (article 6.1.a du RGPD).</p>
+</div>
+
+<div class="card">
+  <h3>✉️ Vos coordonnées</h3>
+  <p>Votre email ou téléphone n'est enregistré que si vous demandez explicitement un
+     service qui l'exige (alerte, rapport par email, mise en relation), avec un consentement
+     distinct par finalité. Chaque accord est listé dans « Mon espace » et révocable à tout
+     moment. Vos coordonnées ne sont jamais vendues ; elles ne sont transmises à un
+     partenaire que si vous avez coché la demande de mise en relation.</p>
+</div>
+
+<div class="card">
+  <h3>🍪 Cookies</h3>
+  <p>Un seul cookie technique (« sid ») relie vos dépôts à votre navigateur pour faire
+     fonctionner « Mon espace ». Il est strictement nécessaire au service (exempté de
+     bandeau de consentement), ne trace rien et n'est partagé avec personne.
+     Aucun cookie publicitaire, aucune mesure d'audience tierce.</p>
+</div>
+
+<div class="card">
+  <h3>⏳ Durées de conservation</h3>
+  <p>Les offres anonymisées alimentent les comparaisons pendant 24 mois au plus, puis sont
+     supprimées ou agrégées. Les coordonnées liées à un consentement sont supprimées dès la
+     révocation de celui-ci.</p>
+</div>
+
+<div class="card">
+  <h3>🗑️ Vos droits (RGPD)</h3>
+  <p>Accès, rectification, effacement, retrait du consentement : le bouton
+     « <a href="/mon-espace">Supprimer mes données</a> » efface immédiatement et
+     définitivement vos offres, corrections, accords et coordonnées.
+     Pour toute autre demande : <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+     Vous pouvez également saisir la CNIL (cnil.fr) si vous estimez que vos droits ne sont
+     pas respectés.</p>
+</div>
+
+<div class="card">
+  <h3>🛡️ Sécurité</h3>
+  <p>Connexion chiffrée (HTTPS), base de données non exposée sur Internet, accès
+     d'administration protégé, et minimisation par construction : ce qui n'est pas
+     collecté ne peut pas fuiter.</p>
+</div>
+{% endblock %}

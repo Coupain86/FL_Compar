@@ -1,0 +1,110 @@
+# TrustRate — PRODUCTION (serveur avec nom de domaine).
+#
+# Mode d'emploi complet : DEPLOIEMENT.md (à la racine du dépôt GitHub).
+# Résumé :
+#   1. Copier .env.example vers .env, tout remplir (domaine, mots de passe…)
+#   2. docker compose -f docker-compose.prod.yml up -d
+#   3. Le site est servi en HTTPS automatique sur https://VOTRE_DOMAINE
+#
+# Comme en local : AUCUNE image à construire — le conteneur télécharge le code
+# depuis GitHub au démarrage. Mise à jour :
+#   docker compose -f docker-compose.prod.yml up -d --force-recreate web
+#
+# Sauvegardes : le service "backup" exporte la base chaque nuit dans ./backups
+# (14 jours conservés). Restauration : voir DEPLOIEMENT.md.
+
+name: trustrate
+
+services:
+  # HTTPS automatique (certificats Let's Encrypt obtenus et renouvelés seuls)
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${DOMAIN:?Renseignez DOMAIN dans .env} --to web:8000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - web
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: credit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Renseignez POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: credit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U credit -d credit"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  web:
+    image: python:3.12-slim
+    restart: unless-stopped
+    # Pas de "ports:" — seul Caddy est exposé à Internet.
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg2://credit:${POSTGRES_PASSWORD}@db:5432/credit
+      SEED_ON_START: "0"
+      MIN_COHORT: ${MIN_COHORT:-8}
+      ADMIN_USER: ${ADMIN_USER:?Renseignez ADMIN_USER dans .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Renseignez ADMIN_PASSWORD dans .env}
+      EDITOR_NAME: ${EDITOR_NAME:-}
+      EDITOR_STATUS: ${EDITOR_STATUS:-}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+      HOST_NAME: ${HOST_NAME:-}
+    command: >
+      bash -c "
+      apt-get update -qq &&
+      apt-get install -yqq --no-install-recommends tesseract-ocr tesseract-ocr-fra curl ca-certificates &&
+      curl -fsSL https://github.com/Coupain86/FL_Compar/archive/refs/heads/main.tar.gz -o /tmp/src.tgz &&
+      mkdir -p /srv && tar xzf /tmp/src.tgz -C /srv --strip-components=1 &&
+      cd /srv &&
+      pip install --no-cache-dir -q -r requirements.txt &&
+      exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips='*'
+      "
+    volumes:
+      - pipcache:/root/.cache/pip
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/sante || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 180s
+
+  # Export de la base chaque nuit dans ./backups (14 jours conservés)
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c "while true; do
+        pg_dump -h db -U credit -d credit -F c
+          -f /backups/trustrate_$$(date +%Y-%m-%d_%H%M).dump &&
+        echo 'sauvegarde OK' ;
+        find /backups -name '*.dump' -mtime +14 -delete ;
+        sleep 86400 ;
+      done"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  pipcache:
+  caddydata:
+  caddyconfig:

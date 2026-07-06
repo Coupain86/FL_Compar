@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Mentions légales — TrustRate{% endblock %}
+{% block content %}
+<h1>Mentions légales</h1>
+
+<div class="card">
+  <h3>Éditeur du site</h3>
+  <p>{{ editor_name }}<br>
+     {{ editor_status }}<br>
+     Contact : <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+</div>
+
+<div class="card">
+  <h3>Hébergement</h3>
+  <p>{{ host_name }}</p>
+</div>
+
+<div class="card">
+  <h3>Nature du service</h3>
+  <p>TrustRate est un service de comparaison indicative d'offres de crédit fondé sur les
+     offres déposées par ses utilisateurs. TrustRate n'est ni un établissement de crédit,
+     ni un intermédiaire en opérations de banque et en services de paiement (IOBSP), et ne
+     perçoit aucune rémunération des banques citées dans les comparaisons.
+     Les positionnements, économies et objectifs de négociation affichés sont des
+     <b>estimations indicatives</b>, calculées automatiquement : ils ne constituent ni un
+     conseil financier personnalisé, ni une offre, ni une garantie de taux. Toute décision
+     de crédit relève de l'utilisateur et de l'établissement prêteur.</p>
+  <p style="margin-top:8px"><b>Un crédit vous engage et doit être remboursé. Vérifiez vos
+     capacités de remboursement avant de vous engager.</b></p>
+</div>
+
+<div class="card">
+  <h3>Propriété intellectuelle</h3>
+  <p>La marque TrustRate, le logo, les textes et les rapports générés sont la propriété de
+     l'éditeur. Les rapports peuvent être librement transmis par l'utilisateur aux
+     établissements bancaires dans le cadre de sa propre négociation.</p>
+</div>
+
+<div class="card">
+  <h3>Médiation et réclamation</h3>
+  <p>Pour toute réclamation : <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+     Conformément au Code de la consommation, l'utilisateur peut recourir gratuitement à un
+     médiateur de la consommation en cas de litige non résolu.</p>
+</div>
+{% endblock %}

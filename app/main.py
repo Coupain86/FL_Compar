@@ -18,7 +18,9 @@ Confidentialité, par construction :
 
 import os
 import secrets
+import time
 import uuid
+from collections import deque
 from datetime import datetime, timedelta
 
 from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
@@ -38,12 +40,48 @@ from .models import Consent, Correction, Offer
 
 app = FastAPI(title="TrustRate")
 
+# Mode production (APP_ENV=production) : cookies Secure, HSTS, admin verrouillé.
+PROD = os.environ.get("APP_ENV", "").lower() == "production"
+
 _HERE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(_HERE, "templates"))
 app.mount("/static", StaticFiles(directory=os.path.join(_HERE, "static")), name="static")
 
 MAX_UPLOAD = 10 * 1024 * 1024
 ALLOWED_EXT = (".pdf", ".jpg", ".jpeg", ".png")
+
+# Anti-abus : l'analyse (OCR compris) coûte du CPU — on borne les dépôts par IP.
+UPLOAD_RATE_MAX = int(os.environ.get("UPLOAD_RATE_MAX", "12"))     # dépôts…
+UPLOAD_RATE_WINDOW = int(os.environ.get("UPLOAD_RATE_WINDOW", "600"))  # …par fenêtre (s)
+_upload_log: dict[str, deque] = {}
+
+
+def _rate_ok(ip: str) -> bool:
+    now = time.time()
+    q = _upload_log.setdefault(ip, deque())
+    while q and now - q[0] > UPLOAD_RATE_WINDOW:
+        q.popleft()
+    if len(q) >= UPLOAD_RATE_MAX:
+        return False
+    q.append(now)
+    return True
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Content-Security-Policy",
+                            "default-src 'self'; img-src 'self' data:; "
+                            "style-src 'self' 'unsafe-inline'; "
+                            "script-src 'self' 'unsafe-inline'; "
+                            "frame-ancestors 'none'")
+    if PROD:
+        resp.headers.setdefault("Strict-Transport-Security",
+                                "max-age=31536000; includeSubDomains")
+    return resp
 
 CREDIT_LABELS = {
     "immobilier": "Immobilier", "consommation": "Consommation / Perso",
@@ -106,7 +144,7 @@ def _sid(request: Request) -> str:
 def _with_cookie(request: Request, response):
     if not request.cookies.get("sid"):
         response.set_cookie("sid", _sid(request), httponly=True, samesite="lax",
-                            max_age=60 * 60 * 24 * 365)
+                            secure=PROD, max_age=60 * 60 * 24 * 365)
     return response
 
 
@@ -155,6 +193,7 @@ def _depot_page(request: Request, erreur: str = ""):
         "taille": "Fichier trop volumineux (10 Mo maximum).",
         "fichier": "Choisissez un fichier avant de continuer.",
         "consentement": "Cochez la case de consentement pour continuer.",
+        "trop": "Beaucoup de dépôts d'affilée — patientez quelques minutes puis réessayez.",
     }
     return _render(request, "depot.html", erreur=messages.get(erreur, ""))
 
@@ -166,6 +205,8 @@ async def analyser(request: Request, db: Session = Depends(get_db),
                    consentement: str = Form("")):
     if consentement != "on":
         return RedirectResponse("/comparer?erreur=consentement", status_code=303)
+    if not _rate_ok(request.client.host if request.client else "?"):
+        return RedirectResponse("/comparer?erreur=trop", status_code=303)
     if fichier is None or not fichier.filename:
         return RedirectResponse("/comparer?erreur=fichier", status_code=303)
     if not fichier.filename.lower().endswith(ALLOWED_EXT):
@@ -207,7 +248,8 @@ async def analyser(request: Request, db: Session = Depends(get_db),
 
     resp = RedirectResponse(f"/comparer/verifier/{offer.id}", status_code=303)
     if not request.cookies.get("sid"):
-        resp.set_cookie("sid", sid, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 365)
+        resp.set_cookie("sid", sid, httponly=True, samesite="lax", secure=PROD,
+                        max_age=60 * 60 * 24 * 365)
 
     db.add(Consent(session_id=sid, offer_id=offer.id, kind="analyse"))
     db.commit()
@@ -417,6 +459,37 @@ def rapports_pdf(offer_id: str, request: Request, db: Session = Depends(get_db),
 
 
 # ─────────────────────────────────────────────
+#  Pages légales (identité de l'éditeur via variables d'environnement)
+# ─────────────────────────────────────────────
+def _legal_ctx():
+    return {
+        "editor_name": os.environ.get("EDITOR_NAME", "[À COMPLÉTER : nom de l'éditeur]"),
+        "editor_status": os.environ.get(
+            "EDITOR_STATUS", "[À COMPLÉTER : statut juridique, SIREN, adresse]"),
+        "contact_email": os.environ.get("CONTACT_EMAIL", "contact@exemple.fr"),
+        "host_name": os.environ.get(
+            "HOST_NAME", "[À COMPLÉTER : hébergeur — nom, adresse, téléphone]"),
+    }
+
+
+@app.get("/mentions-legales")
+def mentions(request: Request):
+    return _render(request, "mentions.html", **_legal_ctx())
+
+
+@app.get("/confidentialite")
+def confidentialite(request: Request):
+    return _render(request, "confidentialite.html", **_legal_ctx())
+
+
+@app.get("/robots.txt")
+def robots():
+    return Response("User-agent: *\nDisallow: /admin\nDisallow: /rapports/\n"
+                    "Disallow: /comparer/verifier/\nDisallow: /resultat/\n",
+                    media_type="text/plain")
+
+
+# ─────────────────────────────────────────────
 #  Mon espace (session) + droit à l'effacement
 # ─────────────────────────────────────────────
 @app.get("/mon-espace")
@@ -454,12 +527,16 @@ _basic = HTTPBasic()
 
 
 def _admin(credentials: HTTPBasicCredentials = Depends(_basic)):
+    from fastapi import HTTPException
+    expected_pass = os.environ.get("ADMIN_PASSWORD", "admin")
+    # En production, un back-office avec le mot de passe par défaut serait une
+    # porte ouverte : on le désactive tant qu'un vrai mot de passe n'est pas posé.
+    if PROD and expected_pass in ("", "admin"):
+        raise HTTPException(status_code=404)
     user_ok = secrets.compare_digest(credentials.username,
                                      os.environ.get("ADMIN_USER", "admin"))
-    pass_ok = secrets.compare_digest(credentials.password,
-                                     os.environ.get("ADMIN_PASSWORD", "admin"))
+    pass_ok = secrets.compare_digest(credentials.password, expected_pass)
     if not (user_ok and pass_ok):
-        from fastapi import HTTPException
         raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Basic"})
     return credentials.username
 
